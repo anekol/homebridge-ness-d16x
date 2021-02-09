@@ -1,0 +1,12 @@
+{
+    "watch": [
+      "src"
+    ],
+    "ext": "ts",
+    "ignore": [],
+    "exec": "tsc && sudo systemctl restart homebridge",
+    "signal": "SIGTERM",
+    "env": {
+      "NODE_OPTIONS": "--trace-warnings"
+    }
+  }

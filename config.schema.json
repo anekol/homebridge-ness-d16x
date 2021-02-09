@@ -1,0 +1,149 @@
+{
+  "pluginAlias": "NessD16x",
+  "pluginType": "platform",
+  "headerDisplay": "Homebridge plugin for Ness D8x/D16x Security Panel",
+  "singular": true,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "description": "Panel display name",
+        "type": "string",
+        "default": "Ness",
+        "required": true
+      },
+      "host": {
+        "description": "Interface IP address",
+        "type": "string",
+        "format": "ipv4",
+        "default": "192.168.1.2",
+        "required": true
+      },
+      "port": {
+        "description": "Interface port",
+        "type": "number",
+        "minimum": 1000,
+        "maximum": 65536,
+        "default": 2401,
+        "required": true
+      },
+      "keypadCode": {
+        "description": "Code for arming/disarming the panel",
+        "type": "string",
+        "default": "0000",
+        "required": true
+      },
+      "excludeModes": {
+        "notitle": true,
+        "type": "array",
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "enum": [
+            "Home",
+            "Night"
+          ]
+        }
+      },
+      "zones": {
+        "notitle": true,
+        "type": "array",
+        "uniqueItems": true,
+        "maxItems": 16,
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "number",
+              "required": true,
+              "minimum": 1,
+              "maximum": 16
+            },
+            "label": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "default": "motion",
+              "required": true,
+              "oneOf": [
+                {
+                  "title": "Contact",
+                  "enum": [
+                    "contact"
+                  ]
+                },
+                {
+                  "title": "Motion",
+                  "enum": [
+                    "motion"
+                  ]
+                },
+                {
+                  "title": "Smoke",
+                  "enum": [
+                    "smoke"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "layout": [
+    "name",
+    {
+      "type": "flex",
+      "flex-flow": "row wrap",
+      "items": [
+        "host",
+        "port",
+        "keypadCode"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Arming Modes to exclude",
+      "expandable": true,
+      "items": [
+        "excludeModes"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Zones",
+      "expandable": true,
+      "items": [
+        {
+          "type": "array",
+          "items": {
+            "type": "div",
+            "displayFlex": true,
+            "flex-direction": "row",
+            "items": [
+              {
+                "key": "zones[].id",
+                "flex": "1 1 50px",
+                "notitle": true,
+                "placeholder": "Zone"
+              },
+              {
+                "key": "zones[].label",
+                "flex": "4 4 200px",
+                "notitle": true,
+                "placeholder": "Label"
+              },
+              {
+                "key": "zones[].type",
+                "flex": "1 1 50px",
+                "notitle": true
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
