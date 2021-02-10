@@ -11,7 +11,7 @@
   "scripts": {
     "lint": "eslint src/**.ts --max-warnings=0",
     "prepare": "rimraf ./dist && tsc",
-    "prepublishOnly": "npm run lint && npm run build"
+    "prepublishOnly": "npm run lint && npm run prepare"
   },
   "keywords": [
     "homebridge-plugin",
@@ -21,6 +21,10 @@
     "D16",
     "D16x"
   ],
+  "repository": "https://github.com/anekol/homebridge-ness-d16x",
+  "bugs": {
+    "url": "https://github.com/anekol/homebridge-ness-d16x/issues"
+  },
   "devDependencies": {
     "@types/node": "^14.14.25",
     "@typescript-eslint/eslint-plugin": "^4.15.0",

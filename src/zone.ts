@@ -9,7 +9,7 @@ export class NessZoneHelper {
   private hap: HAP
   private log: Logger
   private service: Service | null = null
-  private zoneChange: boolean = false
+  private zoneChange = false
 
   // constructor
   constructor (
@@ -22,8 +22,9 @@ export class NessZoneHelper {
   }
 
   // configure
-  public configure () {
-    this.accessory!.getService(this.hap.Service.AccessoryInformation)!
+  public configure (): void {
+    const info = this.accessory.getService(this.hap.Service.AccessoryInformation)
+    if (info) info
       .setCharacteristic(this.hap.Characteristic.Manufacturer, 'Ness')
       .setCharacteristic(this.hap.Characteristic.Model, 'Zone')
 
@@ -60,7 +61,7 @@ export class NessZoneHelper {
   }
 
   // zone changed
-  public zoneChanged (change: boolean) {
+  public zoneChanged (change: boolean): void {
     this.zoneChange = change
     if (this.service) {
       this.log.debug('Zone changed: zone: ' + this.zone.id + ' state: ' + change)

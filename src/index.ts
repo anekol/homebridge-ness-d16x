@@ -2,7 +2,7 @@
 // Ness D8x/D16x alarm panel platform using NessClient
 
 /* eslint-disable no-unused-vars */
-import { API, DynamicPlatformPlugin, HAP, Logger, PlatformAccessory, PlatformConfig } from 'homebridge'
+import { API, APIEvent, DynamicPlatformPlugin, HAP, Logger, PlatformAccessory, PlatformConfig } from 'homebridge'
 import { NessClient } from 'nessclient'
 import { NessPanelHelper } from './panel'
 
@@ -60,70 +60,56 @@ export class NessD16x implements DynamicPlatformPlugin {
     this.zones = ((config.zones || []) as { id: string, type: string, label: string }[])
       .map((z) => { return { id: parseInt(z.id), label: z.label, type: z.type.toUpperCase() as SensorType } })
 
-    // wait for "didFinishLaunching"
-    api.on('didFinishLaunching', () => {
+    // wait for any accessories to be restored
+    api.on(APIEvent.DID_FINISH_LAUNCHING, () => {
       this.log.info('Finished restoring cached accessories')
 
-      // on interface connection
-      this.nessClient.onConnection(() => {
-        this.log.info('Interface: Connected: host: ' + this.host + ' port: ' + this.port)
+      // configure the main panel and it's accessories
+      const uuid = this.hap.uuid.generate(this.name + '_panel')
+      let accessory = this.findRestored(uuid)
+      if (!accessory) {
+        accessory = new this.Accessory(this.name, uuid, this.hap.Categories.SECURITY_SYSTEM)
+        this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory])
+        this.log.info('Added new: ' + accessory.displayName)
+      }
+      new NessPanelHelper(this, accessory, this.nessClient, this.keypadCode, this.excludeModes, this.zones).configure()
+      this.log.info('Configured: ' + accessory.displayName)
+      this.api.updatePlatformAccessories([accessory])
+      this.addConfigured(accessory)
 
-        // configure the main panel and it's accessories
-        const uuid = this.hap.uuid.generate(this.name + '_panel')
-        let accessory = this.findRestored(uuid)
-        if (!accessory) {
-          accessory = new this.Accessory(this.name, uuid, this.hap.Categories.SECURITY_SYSTEM)
-          this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory])
-          this.log.info('Added new: ' + accessory.displayName)
+      // deregister any restored accessories not configured
+      for (const r of this.restored) {
+        if (!this.configured.find(c => c.UUID === r.UUID)) {
+          this.log.info('Deregister: not configured: ' + r.displayName)
+          this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [r])
         }
-        new NessPanelHelper(this, accessory, this.nessClient, this.keypadCode, this.excludeModes, this.zones).configure()
-        this.log.info('Configured: ' + accessory.displayName)
-        this.api.updatePlatformAccessories([accessory])
-        this.addConfigured(accessory)
-
-        // deregister any restored accessories not configured
-        for (const r of this.restored) {
-          if (!this.configured.find(c => c.UUID === r.UUID)) {
-            this.log.info('Deregister: not configured: ' + r.displayName)
-            this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [r])
-          }
-        }
-      })
-
-      // on interface connection error
-      this.nessClient.onConnectionError((error) => {
-        this.log.error('Interface: ' + error)
-        api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, this.configured)
-        this.removeAllConfigured()
-      })
-
-      // try to connect to interface
-      this.nessClient.connect()
+      }
     })
   }
 
   // add accessory to configured list
-  public addConfigured (accessory: PlatformAccessory) {
+  public addConfigured (accessory: PlatformAccessory): void {
     this.configured.push(accessory)
   }
 
   // configureAccessory will be called once for every cached accessory restored
-  public configureAccessory (accessory: PlatformAccessory) {
+  public configureAccessory (accessory: PlatformAccessory): void {
     this.restored.push(accessory)
   }
 
   // find configured accessory
-  public findConfigured (uuid: string) {
+  public findConfigured (uuid: string): PlatformAccessory | undefined {
     return this.configured.find(a => a.UUID === uuid)
   }
 
   // find restored accessory
-  public findRestored (uuid: string) {
+  public findRestored (uuid: string): PlatformAccessory | undefined {
     return this.restored.find(a => a.UUID === uuid)
   }
 
   // remove all configured accessories
-  public removeAllConfigured () {
+  public removeAllConfigured (): void {
+    this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, this.configured)
     this.configured.slice()
   }
 }
