@@ -1,4 +1,5 @@
 # homebridge-ness-d16x
+[![npm](https://img.shields.io/npm/v/homebridge-ness-d16x)](https://www.npmjs.com/package/homebridge-ness-d16x) 
 [![CircleCI](https://circleci.com/gh/anekol/homebridge-ness-d16x/tree/main.svg?style=shield)](https://circleci.com/gh/anekol/homebridge-ness-d16x/tree/main)
 [![codecov](https://codecov.io/gh/anekol/homebridge-ness-d16x/branch/main/graph/badge.svg)](https://codecov.io/gh/anekol/homebridge-ness-d16x)
 
