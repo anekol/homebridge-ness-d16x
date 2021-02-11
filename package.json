@@ -1,7 +1,7 @@
 {
   "name": "homebridge-ness-d16x",
   "description": "Homebridge plugin for Ness D8x / D16x",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "license": "MIT",
   "engines": {
     "node": ">=10.17.0",
