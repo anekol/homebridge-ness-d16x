@@ -2,13 +2,16 @@
 
 import { API, CharacteristicGetCallback, CharacteristicSetCallback, CharacteristicValue, HAP, Logger, PlatformAccessory, Service } from 'homebridge'
 import { ArmingState, NessClient } from 'nessclient'
-import { BaseEvent, PanelVersionUpdate } from 'nessclient/build/event'
-import { ArmingMode, NessD16x, PLUGIN_NAME, PLATFORM_NAME, ZoneConfig } from './index'
+import { BaseEvent, AuxiliaryOutputsUpdate, OutputsUpdate, PanelVersionUpdate, SystemStatusEvent } from 'nessclient/build/event'
+import { AuxiliaryOutputType, EventType, OutputType, Model } from 'nessclient/build/event-types'
+import { TextEncoder } from 'util'
+import { ArmingMode, NessD16x, OutputConfig, PLUGIN_NAME, PLATFORM_NAME, ZoneConfig } from './index'
+import { NessOutputsHelper } from './outputs'
 import { NessZoneHelper } from './zone'
 
 const NO_ERRORS = null
-const NESS_STATUS_ARMING = 'S14'
-const NESS_STATUS_UNSEALED = 'S00'
+const NESS_STATUS_AUXOUTPUTS = 'S18'
+const NESS_STATUS_OUTPUTS = 'S15'
 const NESS_STATUS_VERSION = 'S17'
 const NZONES = 16
 
@@ -17,18 +20,20 @@ export class NessPanelHelper {
   private readonly api: API
   private readonly hap: HAP
   private readonly log: Logger
+  private outputsHelper: NessOutputsHelper | null = null
   private panelState: ArmingState = ArmingState.UNKNOWN
   private service: Service | null = null
   private targetPanelState: ArmingState = ArmingState.UNKNOWN
   private zoneHelpers = new Array<NessZoneHelper>(NZONES)
 
   // constructor
-  constructor (
+  constructor(
     private readonly platform: NessD16x,
     private readonly accessory: PlatformAccessory,
     private readonly nessClient: NessClient,
     private readonly keypadCode: string,
     private readonly excludeModes: string[],
+    private readonly outputs: OutputConfig[],
     private readonly zones: ZoneConfig[]
   ) {
     this.Accessory = platform.api.platformAccessory
@@ -38,7 +43,7 @@ export class NessPanelHelper {
   }
 
   // configure the accessory
-  public configure (): void {
+  public configure(): void {
 
     // configure NessClient event listeners
     this.nessClient.onEventReceived(this.eventReceived.bind(this))
@@ -61,10 +66,25 @@ export class NessPanelHelper {
       .setProps({ validValues: this.validArmingStates(this.excludeModes) })
     this.log.debug("Valid arming states: " + this.validArmingStates(this.excludeModes))
 
-    // configure the zones
+    // configure outputs
+    const uuid = this.hap.uuid.generate(this.accessory.displayName + '_outputs_')
+    let accessory = this.platform.findRestored(uuid) || this.platform.findConfigured(uuid)
+    if (!accessory) {
+      // create a new outputs accessory
+      accessory = new this.Accessory('Outputs', uuid, this.hap.Categories.OTHER);
+      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+      this.log.info('Added new accessory: ' + accessory.displayName);
+    }
+    // wrap with accessory handler
+    this.outputsHelper = new NessOutputsHelper(this.platform, accessory, this.outputs)
+    this.outputsHelper.configure()
+    this.api.updatePlatformAccessories([accessory])
+    this.platform.addConfigured(accessory)
+
+    // configure zones
     for (const zone of this.zones) {
       const { id: zoneId, label: zoneLabel } = zone
-      if (zoneId > 0 && zoneId < NZONES) {
+      if (0 < zoneId && zoneId < NZONES) {
         const uuid = this.hap.uuid.generate(this.accessory.displayName + '_zone_' + zoneId)
         let accessory = this.platform.findRestored(uuid) || this.platform.findConfigured(uuid)
         if (!accessory) {
@@ -91,9 +111,9 @@ export class NessPanelHelper {
       this.log.info('Interface: Connected: host: ' + this.nessClient.host + ' port: ' + this.nessClient.port)
 
       // get panel status and details - don't issue commands too quickly
-      setTimeout(() => this.nessClient.sendCommand(NESS_STATUS_ARMING), 3000)
-      setTimeout(() => this.nessClient.sendCommand(NESS_STATUS_UNSEALED), 3000)
-      setTimeout(() => this.nessClient.sendCommand(NESS_STATUS_VERSION), 3000)
+      setTimeout(() => this.nessClient.sendCommand(NESS_STATUS_OUTPUTS), 5000)
+      setTimeout(() => this.nessClient.sendCommand(NESS_STATUS_AUXOUTPUTS), 5000)
+      setTimeout(() => this.nessClient.sendCommand(NESS_STATUS_VERSION), 5000)
     })
 
     // on interface connection error
@@ -104,35 +124,216 @@ export class NessPanelHelper {
 
   }
 
+  // handle NessClient ArmingState change
+  public stateChanged(state: ArmingState): void {
+    this.log.info("Arming state changed: " + state)
+    this.panelState = state
+    let changedHapState = this.panelToHap(state)
+    if (this.service) {
+      const targetHapState = this.service.getCharacteristic(this.hap.Characteristic.SecuritySystemTargetState).value
+      // DISARMED is the target panel state for target hap of NIGHT
+      if (targetHapState === this.hap.Characteristic.SecuritySystemTargetState.NIGHT_ARM &&
+        changedHapState === this.hap.Characteristic.SecuritySystemCurrentState.DISARMED) {
+        changedHapState = this.hap.Characteristic.SecuritySystemCurrentState.NIGHT_ARM
+      }
+      if (0 < changedHapState) {
+        this.log.debug('stateChanged: ' + state + ' update hap to: ' + this.hapStateText(changedHapState))
+        this.updateCurrentHapState(changedHapState)
+      } else {
+        this.log.debug('stateChanged: state not known: ' + state)
+      }
+    }
+  }
+
+  // handle NessClient eventReceived
+  private eventReceived(event: BaseEvent) {
+    this.log.debug("eventReceived: " + event.constructor.name + " :" + JSON.stringify(event))
+    switch (event.constructor.name) {
+      case 'OutputsUpdate':
+        ((event) => {
+          const outputs = this.outputsFromEvent(event)
+          this.log.info("OutputsUpdate: " + outputs)
+          for (var o of outputs) {
+            switch (o) {
+              case OutputType.AUX1:
+                this.updateOutput(1, true)
+                break
+              case OutputType.AUX2:
+                this.updateOutput(2, true)
+                break
+              case OutputType.AUX3:
+                this.updateOutput(3, true)
+                break
+              case OutputType.AUX4:
+                this.updateOutput(4, true)
+                break
+            }
+          }
+        })(event as OutputsUpdate)
+        break
+      case 'AuxiliaryOutputsUpdate':
+        ((event) => {
+          const outputs = this.auxOutputsFromEvent(event)
+          this.log.info("AuxiliaryOutputsUpdate: " + outputs)
+          for (var o of outputs) {
+            switch (o) {
+              case AuxiliaryOutputType.AUX_1:
+                this.updateOutput(1, true)
+                break
+              case AuxiliaryOutputType.AUX_2:
+                this.updateOutput(2, true)
+                break
+              case AuxiliaryOutputType.AUX_3:
+                this.updateOutput(3, true)
+                break
+              case AuxiliaryOutputType.AUX_4:
+                this.updateOutput(4, true)
+                break
+              case AuxiliaryOutputType.AUX_5:
+                this.updateOutput(5, true)
+                break
+              case AuxiliaryOutputType.AUX_6:
+                this.updateOutput(6, true)
+                break
+              case AuxiliaryOutputType.AUX_7:
+                this.updateOutput(7, true)
+                break
+              case AuxiliaryOutputType.AUX_8:
+                this.updateOutput(8, true)
+                break
+            }
+          }
+        })(event as AuxiliaryOutputsUpdate)
+        break
+      case 'SystemStatusEvent':
+        let id
+        ((event) => {
+          switch (event.type) {
+            case EventType.OUTPUT_ON:
+              id = event.zone
+              this.log.info("OutputOn: " + id)
+              this.updateOutput(id, true)
+              break
+            case EventType.OUTPUT_OFF:
+              id = event.zone
+              this.log.info("OutputOff: " + id)
+              this.updateOutput(id, false)
+              break
+            default:
+              this.log.info("SystemStatusEvent: type: " + event.type)
+              break
+          }
+        })(event as SystemStatusEvent)
+        break
+      case 'PanelVersionUpdate':
+        ((event) => {
+          let model
+          switch (event.model) {
+            case Model.D16X:
+              model = 'D16x'
+              break
+            case Model.D16X_3G:
+              model = 'D16x - 3G'
+              break
+            default:
+              model = 'D8x'
+          }
+          this.updateInfo(model, event.version)
+          this.log.info("Panel details: Model: " + model + " Version: " + event.version)
+        })(event as PanelVersionUpdate)
+        break
+    }
+  }
+
   // handle getSecuritySystemCurrentState
-  private getSecuritySystemCurrentState (callback: CharacteristicGetCallback) {
-    const state = this.panelToHap(this.panelState)
-    this.log.debug('Get CurrentState: ' + state);
-    callback(NO_ERRORS, state)
+  private getSecuritySystemCurrentState(callback: CharacteristicGetCallback) {
+    const hapState = this.panelToHap(this.panelState)
+    this.log.debug('Get SecuritySystemCurrentState: ' + hapState);
+    hapState < 0 ? callback(new Error("Panel state not known"), hapState) : callback(NO_ERRORS, hapState)
   }
 
   // handle getSecuritySystemTargetState
-  private getSecuritySystemTargetState (callback: CharacteristicGetCallback) {
-    const state = this.targetPanelState !== ArmingState.UNKNOWN ? this.targetPanelState : this.panelState
-    this.log.debug('Get TargetState: ' + this.panelToHap(state));
-    callback(NO_ERRORS, this.panelToHap(state))
+  private getSecuritySystemTargetState(callback: CharacteristicGetCallback) {
+    const state = this.targetPanelState == ArmingState.UNKNOWN ? this.panelState : this.targetPanelState
+    const hapState = this.panelToHap(state)
+    this.log.debug('Get SecuritySystemTargetState: ' + hapState);
+    hapState < 0 ? callback(new Error("Panel state not known"), hapState) : callback(NO_ERRORS, hapState)
   }
 
+  // map hap state to text
+  private hapStateText(hapState: number) {
+    switch (hapState) {
+      case this.hap.Characteristic.SecuritySystemCurrentState.DISARMED:
+        return 'DISARMED'
+      case this.hap.Characteristic.SecuritySystemCurrentState.AWAY_ARM:
+        return 'AWAY'
+      case this.hap.Characteristic.SecuritySystemCurrentState.NIGHT_ARM:
+        return 'NIGHT'
+      case this.hap.Characteristic.SecuritySystemCurrentState.STAY_ARM:
+        return 'HOME'
+      case this.hap.Characteristic.SecuritySystemCurrentState.ALARM_TRIGGERED:
+        return 'TRIGGERED'
+      default:
+        return 'NOT KNOWN'
+    }
+  }
+
+  // extract outputs from AuxiliaryOutputsUpdate event
+  // kludge because ness client 2.2.0 does not provide access to private member _outputs
+  private auxOutputsFromEvent(event: AuxiliaryOutputsUpdate): AuxiliaryOutputType[] {
+    const text = JSON.stringify(event)
+    return JSON.parse(text)._outputs
+  }
+
+  // extract outputs from OutputsUpdate event
+  // kludge because ness client 2.2.0 does not provide access to private member _outputs
+  private outputsFromEvent(event: OutputsUpdate): OutputType[] {
+    const text = JSON.stringify(event)
+    return JSON.parse(text)._outputs
+  }
+
+  // map panel state to hap state
+  private panelToHap(panelState: ArmingState) {
+    let hapState = -1
+    switch (panelState) {
+      case ArmingState.ARMED_HOME:
+        hapState = this.hap.Characteristic.SecuritySystemCurrentState.STAY_ARM
+        break
+      case ArmingState.ARMED_AWAY:
+        hapState = this.hap.Characteristic.SecuritySystemCurrentState.AWAY_ARM
+        break
+      case ArmingState.ARMED_NIGHT:
+        hapState = this.hap.Characteristic.SecuritySystemCurrentState.NIGHT_ARM
+        break
+      case ArmingState.DISARMED:
+        hapState = this.hap.Characteristic.SecuritySystemCurrentState.DISARMED
+        break
+      case ArmingState.TRIGGERED:
+        hapState = this.hap.Characteristic.SecuritySystemCurrentState.ALARM_TRIGGERED
+        break
+      case ArmingState.UNKNOWN:
+      case ArmingState.ARMING:
+      case ArmingState.ENTRY_DELAY:
+      case ArmingState.EXIT_DELAY:
+        break
+      default:
+        this.log.error('Panel state change not known: panel state: ' + panelState)
+    }
+    return hapState
+  }
   // handle setSecuritySystemTargetState
-  private setSecuritySystemTargetState (targetHapState: CharacteristicValue, callback: CharacteristicSetCallback) {
+  private setSecuritySystemTargetState(targetHapState: CharacteristicValue, callback: CharacteristicSetCallback) {
     const panelAsHap = this.panelToHap(this.panelState)
     this.log.debug('Request: ' + this.hapStateText(targetHapState as number) + ' (Panel state: ' + this.hapStateText(panelAsHap) + ')')
     if (panelAsHap === targetHapState) {
       this.updateCurrentHapState(targetHapState)
       this.log.debug('Request: ' + this.hapStateText(targetHapState) + ' (Panel state matches - nothing to do)')
     } else {
-
       switch (targetHapState) {
         case this.hap.Characteristic.SecuritySystemTargetState.STAY_ARM:
           this.targetPanelState = ArmingState.ARMED_HOME
           this.nessClient.armHome(this.keypadCode)
           this.log.info('Request: ' + this.hapStateText(targetHapState) + ' Command: ARM HOME')
-
           break
         case this.hap.Characteristic.SecuritySystemTargetState.AWAY_ARM:
           this.targetPanelState = ArmingState.ARMED_AWAY
@@ -161,107 +362,8 @@ export class NessPanelHelper {
     callback(NO_ERRORS)
   }
 
-  // handle NessClient eventReceived
-  private eventReceived (event: BaseEvent) {
-    this.log.debug("eventReceived: " + JSON.stringify(event))
-    switch (event.constructor.name) {
-      case 'PanelVersionUpdate':
-        ((event) => {
-          let model
-          switch (event.model) {
-            case 0:
-              model = 'D16x'
-              break
-            case 0x4:
-              model = 'D16x - 3G'
-              break
-            default:
-              model = 'D8x'
-          }
-          this.updateInfo(model, event.version)
-          this.log.info("Panel details: Model: " + model + " Version: " + event.version)
-        })(event as PanelVersionUpdate)
-    }
-  }
-
-  // handle NessClient ArmingState change
-  public stateChanged (state: ArmingState): void {
-    this.log.info("Arming state changed: " + state)
-    this.panelState = state
-    let changedHapState = this.panelToHap(state)
-    if (this.service) {
-      const targetHapState = this.service.getCharacteristic(this.hap.Characteristic.SecuritySystemTargetState).value
-      // DISARMED is the target panel state for target hap of NIGHT
-      if (targetHapState === this.hap.Characteristic.SecuritySystemTargetState.NIGHT_ARM &&
-        changedHapState === this.hap.Characteristic.SecuritySystemCurrentState.DISARMED) {
-        changedHapState = this.hap.Characteristic.SecuritySystemCurrentState.NIGHT_ARM
-      }
-      if (0 < changedHapState) {
-        this.log.debug('stateChanged: ' + state + ' update hap to: ' + this.hapStateText(changedHapState))
-        this.updateCurrentHapState(changedHapState)
-      } else {
-        this.log.debug('stateChanged: state not known: ' + state)
-      }
-    }
-  }
-
-  // handle NessClient zone change
-  private zoneChanged (state: [zone: number, change: boolean]) {
-    this.log.debug("zoneChanged: zone: " + state[0], " change: " + state[1])
-    const helper = this.zoneHelpers[state[0] - 1]
-    if (helper) helper.zoneChanged(state[1])
-  }
-
-  // map hap state to text
-  private hapStateText (hapState: number) {
-    switch (hapState) {
-      case this.hap.Characteristic.SecuritySystemCurrentState.DISARMED:
-        return 'DISARMED'
-      case this.hap.Characteristic.SecuritySystemCurrentState.AWAY_ARM:
-        return 'AWAY'
-      case this.hap.Characteristic.SecuritySystemCurrentState.NIGHT_ARM:
-        return 'NIGHT'
-      case this.hap.Characteristic.SecuritySystemCurrentState.STAY_ARM:
-        return 'HOME'
-      case this.hap.Characteristic.SecuritySystemCurrentState.ALARM_TRIGGERED:
-        return 'TRIGGERED'
-      default:
-        return 'NOT KNOWN'
-    }
-  }
-
-  // map panel state to hap state
-  private panelToHap (panelState: ArmingState) {
-    let hapState = -1
-    switch (panelState) {
-      case ArmingState.ARMED_HOME:
-        hapState = this.hap.Characteristic.SecuritySystemCurrentState.STAY_ARM
-        break
-      case ArmingState.ARMED_AWAY:
-        hapState = this.hap.Characteristic.SecuritySystemCurrentState.AWAY_ARM
-        break
-      case ArmingState.ARMED_NIGHT:
-        hapState = this.hap.Characteristic.SecuritySystemCurrentState.NIGHT_ARM
-        break
-      case ArmingState.DISARMED:
-        hapState = this.hap.Characteristic.SecuritySystemCurrentState.DISARMED
-        break
-      case ArmingState.TRIGGERED:
-        hapState = this.hap.Characteristic.SecuritySystemCurrentState.ALARM_TRIGGERED
-        break
-      case ArmingState.UNKNOWN:
-      case ArmingState.ARMING:
-      case ArmingState.ENTRY_DELAY:
-      case ArmingState.EXIT_DELAY:
-        break
-      default:
-        this.log.error('Panel state change not known: panel state: ' + panelState)
-    }
-    return hapState
-  }
-
   // map target state to mode
-  private stateToMode (state: CharacteristicValue) {
+  private stateToMode(state: CharacteristicValue) {
     switch (state) {
       case this.hap.Characteristic.SecuritySystemCurrentState.DISARMED:
         return ArmingMode.OFF
@@ -277,13 +379,13 @@ export class NessPanelHelper {
   }
 
   // update current hap state
-  private updateCurrentHapState (state: number) {
+  private updateCurrentHapState(state: number) {
     if (this.service)
       this.service.updateCharacteristic(this.hap.Characteristic.SecuritySystemCurrentState, state)
   }
 
   // update info
-  private updateInfo (model: string, version: string) {
+  private updateInfo(model: string, version: string) {
     if (this.accessory) {
       const service = this.accessory.getService(this.hap.Service.AccessoryInformation)
       if (service) {
@@ -292,9 +394,13 @@ export class NessPanelHelper {
       }
     }
   }
+  // update output
+  private updateOutput(id: number, state: boolean) {
+    if (this.outputsHelper) this.outputsHelper.updateOutput(id, state)
+  }
 
   // valid arming states
-  private validArmingStates (excludeModes: string[]) {
+  private validArmingStates(excludeModes: string[]) {
     const states = [
       this.hap.Characteristic.SecuritySystemTargetState.NIGHT_ARM,
       this.hap.Characteristic.SecuritySystemTargetState.STAY_ARM,
@@ -308,5 +414,12 @@ export class NessPanelHelper {
     // always include DISARM
     valid.push(this.hap.Characteristic.SecuritySystemTargetState.DISARM)
     return valid
+  }
+
+  // handle NessClient zone change
+  private zoneChanged(state: [zone: number, change: boolean]) {
+    this.log.debug("zoneChanged: zone: " + state[0], " change: " + state[1])
+    const helper = this.zoneHelpers[state[0] - 1]
+    if (helper) helper.zoneChanged(state[1])
   }
 }

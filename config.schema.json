@@ -45,6 +45,28 @@
           ]
         }
       },
+      "outputs": {
+        "notitle": true,
+        "type": "array",
+        "uniqueKeys": [
+          "/id"
+        ],
+        "maxItems": 8,
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "number",
+              "required": true,
+              "minimum": 1,
+              "maximum": 8
+            },
+            "label": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "zones": {
         "notitle": true,
         "type": "array",
@@ -52,10 +74,13 @@
         "maxItems": 16,
         "items": {
           "type": "object",
+          "required": [
+            "id",
+            "type"
+          ],
           "properties": {
             "id": {
               "type": "number",
-              "required": true,
               "minimum": 1,
               "maximum": 16
             },
@@ -65,7 +90,6 @@
             "type": {
               "type": "string",
               "default": "motion",
-              "required": true,
               "oneOf": [
                 {
                   "title": "Contact",
@@ -109,6 +133,35 @@
       "expandable": true,
       "items": [
         "excludeModes"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Outputs",
+      "expandable": true,
+      "items": [
+        {
+          "type": "array",
+          "items": {
+            "type": "div",
+            "displayFlex": true,
+            "flex-direction": "row",
+            "items": [
+              {
+                "key": "outputs[].id",
+                "flex": "1 1 50px",
+                "notitle": true,
+                "placeholder": "Aux"
+              },
+              {
+                "key": "outputs[].label",
+                "flex": "4 4 200px",
+                "notitle": true,
+                "placeholder": "Label"
+              }
+            ]
+          }
+        }
       ]
     },
     {
