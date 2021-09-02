@@ -19,6 +19,7 @@ export enum SensorType {
   MOTION = 'MOTION',
   SMOKE = 'SMOKE'
 }
+export type OutputConfig = { id: number, label: string }
 export type ZoneConfig = { id: number, label: string, type: SensorType }
 
 module.exports = (api: API) => {
@@ -27,19 +28,21 @@ module.exports = (api: API) => {
 
 export class NessD16x implements DynamicPlatformPlugin {
   private readonly Accessory: typeof PlatformAccessory;
+
   private readonly configured: PlatformAccessory[] = []
   private readonly hap: HAP
   private readonly host: string
   private readonly keypadCode: string
   private readonly name: string
   private readonly nessClient: NessClient
+  private readonly outputs: OutputConfig[]
   private readonly port: string = '2401'
   private readonly restored: PlatformAccessory[] = []
   private readonly excludeModes: ArmingMode[]
   private readonly zones: ZoneConfig[]
 
   // constructor
-  constructor (
+  constructor(
     public readonly log: Logger,
     public readonly config: PlatformConfig,
     public readonly api: API
@@ -55,6 +58,8 @@ export class NessD16x implements DynamicPlatformPlugin {
     this.nessClient = new NessClient(this.host, +this.port)
 
     // map config strings to enums
+    this.outputs = ((config.outputs || []) as { id: string, label: string }[])
+      .map((a) => { return { id: parseInt(a.id), label: a.label } })
     this.excludeModes = ((config.excludeModes || []) as string[])
       .map((m) => m.toUpperCase() as ArmingMode)
     this.zones = ((config.zones || []) as { id: string, type: string, label: string }[])
@@ -72,14 +77,14 @@ export class NessD16x implements DynamicPlatformPlugin {
         this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory])
         this.log.info('Added new: ' + accessory.displayName)
       }
-      new NessPanelHelper(this, accessory, this.nessClient, this.keypadCode, this.excludeModes, this.zones).configure()
+      new NessPanelHelper(this, accessory, this.nessClient, this.keypadCode, this.excludeModes, this.outputs, this.zones).configure()
       this.log.info('Configured: ' + accessory.displayName)
       this.api.updatePlatformAccessories([accessory])
       this.addConfigured(accessory)
 
       // deregister any restored accessories not configured
       for (const r of this.restored) {
-        if (!this.configured.find(c => c.UUID === r.UUID)) {
+        if (!this.findConfigured(r.UUID)) {
           this.log.info('Deregister: not configured: ' + r.displayName)
           this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [r])
         }
@@ -88,27 +93,27 @@ export class NessD16x implements DynamicPlatformPlugin {
   }
 
   // add accessory to configured list
-  public addConfigured (accessory: PlatformAccessory): void {
+  public addConfigured(accessory: PlatformAccessory): void {
     this.configured.push(accessory)
   }
 
   // configureAccessory will be called once for every cached accessory restored
-  public configureAccessory (accessory: PlatformAccessory): void {
+  public configureAccessory(accessory: PlatformAccessory): void {
     this.restored.push(accessory)
   }
 
   // find configured accessory
-  public findConfigured (uuid: string): PlatformAccessory | undefined {
+  public findConfigured(uuid: string): PlatformAccessory | undefined {
     return this.configured.find(a => a.UUID === uuid)
   }
 
   // find restored accessory
-  public findRestored (uuid: string): PlatformAccessory | undefined {
+  public findRestored(uuid: string): PlatformAccessory | undefined {
     return this.restored.find(a => a.UUID === uuid)
   }
 
   // remove all configured accessories
-  public removeAllConfigured (): void {
+  public removeAllConfigured(): void {
     this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, this.configured)
     this.configured.slice()
   }
