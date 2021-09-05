@@ -1,6 +1,11 @@
 
 // Ness D8x/D16x alarm panel platform using NessClient
 
+// Change Log
+// 0.0.4: 
+//  * Add support for Outputs and AuxiliaryOutputs, add low battery alarm
+//  * Ensure illegal characteristic values are not set on unknown arming state
+
 /* eslint-disable no-unused-vars */
 import { API, APIEvent, DynamicPlatformPlugin, HAP, Logger, PlatformAccessory, PlatformConfig } from 'homebridge'
 import { NessClient } from 'nessclient'

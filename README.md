@@ -13,7 +13,7 @@ Requires an interface that supports [Ness D8x / D16x Serial Interface ASCII prot
 
 Night mode is not supported by the Ness D8x/D16x, but is provided as a no-op for use in Homekit rules.
 
-Home mode (Ness Day Mode) may not be configured on your panel. If Ness Day Mode is not configured on your panel and you don't exclude mode "Home", be aware that selecting Away followed by Home will not disarm the panel (Night or Off will).
+Home mode (Ness Home/Monitor Mode) may not be configured on your panel. If Ness Home/Monitor Mode is not configured on your panel and you don't exclude mode "Home", be aware that selecting Away followed by Home will not disarm the panel (Night or Off will).
 
 ## Installation
 ```sh
