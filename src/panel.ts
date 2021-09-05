@@ -1,10 +1,15 @@
 // Ness D8/16 Panel accessory helper
 
-import { API, CharacteristicGetCallback, CharacteristicSetCallback, CharacteristicValue, HAP, Logger, PlatformAccessory, Service } from 'homebridge'
+import {
+  API, CharacteristicGetCallback, CharacteristicSetCallback, CharacteristicValue,
+  HAP, Logger, PlatformAccessory
+} from 'homebridge'
 import { ArmingState, NessClient } from 'nessclient'
-import { BaseEvent, AuxiliaryOutputsUpdate, OutputsUpdate, PanelVersionUpdate, SystemStatusEvent } from 'nessclient/build/event'
-import { AuxiliaryOutputType, EventType, OutputType, Model } from 'nessclient/build/event-types'
-import { TextEncoder } from 'util'
+import {
+  AuxiliaryOutputsUpdate, BaseEvent, MiscellaneousAlarmsUpdate,
+  OutputsUpdate, PanelVersionUpdate, StatusUpdate, SystemStatusEvent
+} from 'nessclient/build/event'
+import { AlarmType, EventType, Model } from 'nessclient/build/event-types'
 import { ArmingMode, NessD16x, OutputConfig, PLUGIN_NAME, PLATFORM_NAME, ZoneConfig } from './index'
 import { NessOutputsHelper } from './outputs'
 import { NessZoneHelper } from './zone'
@@ -12,17 +17,17 @@ import { NessZoneHelper } from './zone'
 const NO_ERRORS = null
 const NESS_STATUS_AUXOUTPUTS = 'S18'
 const NESS_STATUS_OUTPUTS = 'S15'
+const NESS_STATUS_MISC_ALARMS = 'S13'
 const NESS_STATUS_VERSION = 'S17'
 const NZONES = 16
 
 export class NessPanelHelper {
-  private readonly Accessory: typeof PlatformAccessory;
+
   private readonly api: API
   private readonly hap: HAP
   private readonly log: Logger
   private outputsHelper: NessOutputsHelper | null = null
   private panelState: ArmingState = ArmingState.UNKNOWN
-  private service: Service | null = null
   private targetPanelState: ArmingState = ArmingState.UNKNOWN
   private zoneHelpers = new Array<NessZoneHelper>(NZONES)
 
@@ -36,15 +41,13 @@ export class NessPanelHelper {
     private readonly outputs: OutputConfig[],
     private readonly zones: ZoneConfig[]
   ) {
-    this.Accessory = platform.api.platformAccessory
     this.api = platform.api
     this.hap = platform.api.hap
     this.log = platform.log
   }
 
-  // configure the accessory
+  // configure the main panel accessory
   public configure(): void {
-
     // configure NessClient event listeners
     this.nessClient.onEventReceived(this.eventReceived.bind(this))
     this.nessClient.onStateChange(this.stateChanged.bind(this))
@@ -55,51 +58,63 @@ export class NessPanelHelper {
     if (info) info.setCharacteristic(this.hap.Characteristic.Manufacturer, 'Ness')
 
     // configure the security service
-    this.service = this.accessory.getService(this.hap.Service.SecuritySystem) ||
+    const security = this.accessory.getService(this.hap.Service.SecuritySystem) ||
       this.accessory.addService(this.hap.Service.SecuritySystem)
-    this.service.getCharacteristic(this.hap.Characteristic.SecuritySystemCurrentState)
+
+    // configure current state handler
+    security.getCharacteristic(this.hap.Characteristic.SecuritySystemCurrentState)
       .on('get', this.getSecuritySystemCurrentState.bind(this))
-    this.service.getCharacteristic(this.hap.Characteristic.SecuritySystemTargetState)
+
+    // configure target state handler
+    security.getCharacteristic(this.hap.Characteristic.SecuritySystemTargetState)
       .on('get', this.getSecuritySystemTargetState.bind(this))
       .on('set', this.setSecuritySystemTargetState.bind(this))
       // configure valid arming states/modes
       .setProps({ validValues: this.validArmingStates(this.excludeModes) })
     this.log.debug("Valid arming states: " + this.validArmingStates(this.excludeModes))
 
-    // configure outputs
-    const uuid = this.hap.uuid.generate(this.accessory.displayName + '_outputs_')
-    let accessory = this.platform.findRestored(uuid) || this.platform.findConfigured(uuid)
-    if (!accessory) {
-      // create a new outputs accessory
-      accessory = new this.Accessory('Outputs', uuid, this.hap.Categories.OTHER);
-      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
-      this.log.info('Added new accessory: ' + accessory.displayName);
-    }
-    // wrap with accessory handler
-    this.outputsHelper = new NessOutputsHelper(this.platform, accessory, this.outputs)
-    this.outputsHelper.configure()
-    this.api.updatePlatformAccessories([accessory])
-    this.platform.addConfigured(accessory)
+    // configure battery service
+    const battery = this.accessory.getService(this.hap.Service.BatteryService) ||
+      this.accessory.addService(this.hap.Service.BatteryService)
 
-    // configure zones
-    for (const zone of this.zones) {
-      const { id: zoneId, label: zoneLabel } = zone
-      if (0 < zoneId && zoneId < NZONES) {
-        const uuid = this.hap.uuid.generate(this.accessory.displayName + '_zone_' + zoneId)
-        let accessory = this.platform.findRestored(uuid) || this.platform.findConfigured(uuid)
-        if (!accessory) {
-          // create a new zone accessory
-          accessory = new this.Accessory('Zone ' + zoneLabel, uuid, this.hap.Categories.SENSOR)
-          this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory])
-          this.log.info('Added new: Zone: ' + zoneId + ': ' + accessory.displayName)
+    // configure outputs accessory
+    if (0 < this.outputs.length) {
+      const uuid = this.hap.uuid.generate(this.accessory.displayName + '_outputs_')
+      let accessory = this.platform.findRestored(uuid) || this.platform.findConfigured(uuid)
+      if (!accessory) {
+        // create a new outputs accessory
+        accessory = new this.api.platformAccessory('Outputs', uuid, this.hap.Categories.OTHER);
+        this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+        this.log.info('Added new accessory: ' + accessory.displayName);
+      }
+      // wrap with accessory handler
+      this.outputsHelper = new NessOutputsHelper(this.platform, accessory, this.outputs)
+      this.outputsHelper.configure()
+      this.api.updatePlatformAccessories([accessory])
+      this.platform.addConfigured(accessory)
+    }
+
+    // configure zones accessory
+    if (0 < this.zones.length) {
+      for (const zone of this.zones) {
+        const { id: zoneId, label: zoneLabel } = zone
+        if (0 < zoneId && zoneId < NZONES) {
+          const uuid = this.hap.uuid.generate(this.accessory.displayName + '_zone_' + zoneId)
+          let accessory = this.platform.findRestored(uuid) || this.platform.findConfigured(uuid)
+          if (!accessory) {
+            // create a new zone accessory
+            accessory = new this.api.platformAccessory('Zone ' + zoneLabel, uuid, this.hap.Categories.SENSOR)
+            this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory])
+            this.log.info('Added new: Zone: ' + zoneId + ': ' + accessory.displayName)
+          }
+          // wrap with accessory handler
+          const helper = new NessZoneHelper(this.platform, accessory, zone)
+          this.zoneHelpers[zoneId - 1] = helper
+          helper.configure()
+          this.api.updatePlatformAccessories([accessory])
+          this.log.info('Configured: Zone: ' + zoneId + ': ' + accessory.displayName)
+          this.platform.addConfigured(accessory)
         }
-        // wrap with accessory handler
-        const helper = new NessZoneHelper(this.platform, accessory, zone)
-        this.zoneHelpers[zoneId - 1] = helper
-        helper.configure()
-        this.api.updatePlatformAccessories([accessory])
-        this.log.info('Configured: Zone: ' + zoneId + ': ' + accessory.displayName)
-        this.platform.addConfigured(accessory)
       }
     }
 
@@ -113,6 +128,7 @@ export class NessPanelHelper {
       // get panel status and details - don't issue commands too quickly
       setTimeout(() => this.nessClient.sendCommand(NESS_STATUS_OUTPUTS), 5000)
       setTimeout(() => this.nessClient.sendCommand(NESS_STATUS_AUXOUTPUTS), 5000)
+      setTimeout(() => this.nessClient.sendCommand(NESS_STATUS_MISC_ALARMS), 5000)
       setTimeout(() => this.nessClient.sendCommand(NESS_STATUS_VERSION), 5000)
     })
 
@@ -121,7 +137,6 @@ export class NessPanelHelper {
       this.log.error('Interface: ' + error)
       this.platform.removeAllConfigured()
     })
-
   }
 
   // handle NessClient ArmingState change
@@ -129,8 +144,9 @@ export class NessPanelHelper {
     this.log.info("Arming state changed: " + state)
     this.panelState = state
     let changedHapState = this.panelToHap(state)
-    if (this.service) {
-      const targetHapState = this.service.getCharacteristic(this.hap.Characteristic.SecuritySystemTargetState).value
+    const security = this.accessory.getService(this.hap.Service.SecuritySystem)
+    if (security) {
+      const targetHapState = security.getCharacteristic(this.hap.Characteristic.SecuritySystemTargetState).value
       // DISARMED is the target panel state for target hap of NIGHT
       if (targetHapState === this.hap.Characteristic.SecuritySystemTargetState.NIGHT_ARM &&
         changedHapState === this.hap.Characteristic.SecuritySystemCurrentState.DISARMED) {
@@ -147,101 +163,61 @@ export class NessPanelHelper {
 
   // handle NessClient eventReceived
   private eventReceived(event: BaseEvent) {
-    this.log.debug("eventReceived: " + event.constructor.name + " :" + JSON.stringify(event))
-    switch (event.constructor.name) {
-      case 'OutputsUpdate':
-        ((event) => {
-          const outputs = this.outputsFromEvent(event)
-          this.log.info("OutputsUpdate: " + outputs)
-          for (var o of outputs) {
-            switch (o) {
-              case OutputType.AUX1:
-                this.updateOutput(1, true)
-                break
-              case OutputType.AUX2:
-                this.updateOutput(2, true)
-                break
-              case OutputType.AUX3:
-                this.updateOutput(3, true)
-                break
-              case OutputType.AUX4:
-                this.updateOutput(4, true)
-                break
-            }
-          }
-        })(event as OutputsUpdate)
-        break
-      case 'AuxiliaryOutputsUpdate':
-        ((event) => {
-          const outputs = this.auxOutputsFromEvent(event)
-          this.log.info("AuxiliaryOutputsUpdate: " + outputs)
-          for (var o of outputs) {
-            switch (o) {
-              case AuxiliaryOutputType.AUX_1:
-                this.updateOutput(1, true)
-                break
-              case AuxiliaryOutputType.AUX_2:
-                this.updateOutput(2, true)
-                break
-              case AuxiliaryOutputType.AUX_3:
-                this.updateOutput(3, true)
-                break
-              case AuxiliaryOutputType.AUX_4:
-                this.updateOutput(4, true)
-                break
-              case AuxiliaryOutputType.AUX_5:
-                this.updateOutput(5, true)
-                break
-              case AuxiliaryOutputType.AUX_6:
-                this.updateOutput(6, true)
-                break
-              case AuxiliaryOutputType.AUX_7:
-                this.updateOutput(7, true)
-                break
-              case AuxiliaryOutputType.AUX_8:
-                this.updateOutput(8, true)
-                break
-            }
-          }
-        })(event as AuxiliaryOutputsUpdate)
-        break
-      case 'SystemStatusEvent':
-        let id
-        ((event) => {
-          switch (event.type) {
-            case EventType.OUTPUT_ON:
-              id = event.zone
-              this.log.info("OutputOn: " + id)
-              this.updateOutput(id, true)
-              break
-            case EventType.OUTPUT_OFF:
-              id = event.zone
-              this.log.info("OutputOff: " + id)
-              this.updateOutput(id, false)
-              break
-            default:
-              this.log.info("SystemStatusEvent: type: " + event.type)
-              break
-          }
-        })(event as SystemStatusEvent)
-        break
-      case 'PanelVersionUpdate':
-        ((event) => {
-          let model
-          switch (event.model) {
-            case Model.D16X:
-              model = 'D16x'
-              break
-            case Model.D16X_3G:
-              model = 'D16x - 3G'
-              break
-            default:
-              model = 'D8x'
-          }
-          this.updateInfo(model, event.version)
-          this.log.info("Panel details: Model: " + model + " Version: " + event.version)
-        })(event as PanelVersionUpdate)
-        break
+    if (event instanceof SystemStatusEvent)
+      this.handleSystemStatusEvent(event)
+    else if (event instanceof StatusUpdate)
+      this.handleStatusUpdate(event)
+    else this.log.error("Event not known: " + JSON.stringify(event))
+  }
+
+  // handle miscellaneous alarms from status request
+  private handleMiscAlarmsUpdate(event: MiscellaneousAlarmsUpdate) {
+    // kludge because ness client 2.2.0 does not provide access to private member _includedAlarms
+    const alarms: AlarmType[] = JSON.parse(JSON.stringify(event))._includedAlarms
+    for (var alarm of alarms) {
+      switch (alarm) {
+        case AlarmType.PANEL_BATTERY_LOW:
+        case AlarmType.PANEL_BATTERY_LOW2:
+          this.updateStatusLowBattery(true)
+          break
+      }
+    }
+  }
+
+  // handle panel version
+  private handlePanelUpdate(event: PanelVersionUpdate) {
+    let model
+    switch (event.model) {
+      case Model.D16X: model = 'D16x'; break
+      case Model.D16X_3G: model = 'D16x - 3G'; break
+      default: model = 'D8x'
+    }
+    this.log.info("Panel details: Model: " + model + " Version: " + event.version)
+    this.updateInfo(model, event.version)
+  }
+
+  // handle status update event - received in response to a status request
+  private handleStatusUpdate(event: StatusUpdate) {
+    this.log.debug("Status Update: " + event.constructor.name + " :" + JSON.stringify(event))
+    if (event instanceof AuxiliaryOutputsUpdate) {
+      if (this.outputsHelper) this.outputsHelper.updateAuxilaryOutputs(event)
+    }
+    else if (event instanceof OutputsUpdate) {
+      if (this.outputsHelper) this.outputsHelper.updateOutputs(event)
+    }
+    else if (event instanceof MiscellaneousAlarmsUpdate)
+      this.handleMiscAlarmsUpdate(event)
+    else if (event instanceof PanelVersionUpdate)
+      this.handlePanelUpdate(event)
+  }
+
+  // handle system status event - received in response to a system event
+  private handleSystemStatusEvent(event: SystemStatusEvent) {
+    switch (event.type) {
+      case EventType.OUTPUT_ON: if (this.outputsHelper) this.outputsHelper.updateOutput(event.zone, true); break
+      case EventType.OUTPUT_OFF: if (this.outputsHelper) this.outputsHelper.updateOutput(event.zone, false); break
+      case EventType.BATTERY_FAILURE: this.updateStatusLowBattery(true); break
+      case EventType.BATTERY_NORMAL: this.updateStatusLowBattery(false); break
     }
   }
 
@@ -278,20 +254,6 @@ export class NessPanelHelper {
     }
   }
 
-  // extract outputs from AuxiliaryOutputsUpdate event
-  // kludge because ness client 2.2.0 does not provide access to private member _outputs
-  private auxOutputsFromEvent(event: AuxiliaryOutputsUpdate): AuxiliaryOutputType[] {
-    const text = JSON.stringify(event)
-    return JSON.parse(text)._outputs
-  }
-
-  // extract outputs from OutputsUpdate event
-  // kludge because ness client 2.2.0 does not provide access to private member _outputs
-  private outputsFromEvent(event: OutputsUpdate): OutputType[] {
-    const text = JSON.stringify(event)
-    return JSON.parse(text)._outputs
-  }
-
   // map panel state to hap state
   private panelToHap(panelState: ArmingState) {
     let hapState = -1
@@ -321,6 +283,7 @@ export class NessPanelHelper {
     }
     return hapState
   }
+
   // handle setSecuritySystemTargetState
   private setSecuritySystemTargetState(targetHapState: CharacteristicValue, callback: CharacteristicSetCallback) {
     const panelAsHap = this.panelToHap(this.panelState)
@@ -380,23 +343,36 @@ export class NessPanelHelper {
 
   // update current hap state
   private updateCurrentHapState(state: number) {
-    if (this.service)
-      this.service.updateCharacteristic(this.hap.Characteristic.SecuritySystemCurrentState, state)
+    const security = this.accessory.getService(this.hap.Service.SecuritySystem)
+    if (security) {
+      security.updateCharacteristic(this.hap.Characteristic.SecuritySystemCurrentState, state)
+    }
   }
 
   // update info
   private updateInfo(model: string, version: string) {
-    if (this.accessory) {
-      const service = this.accessory.getService(this.hap.Service.AccessoryInformation)
-      if (service) {
-        service.setCharacteristic(this.hap.Characteristic.Model, model)
-        service.setCharacteristic(this.hap.Characteristic.FirmwareRevision, version)
-      }
+    const info = this.accessory.getService(this.hap.Service.AccessoryInformation)
+    if (info) {
+      info.setCharacteristic(this.hap.Characteristic.Model, model)
+      info.setCharacteristic(this.hap.Characteristic.FirmwareRevision, version)
     }
   }
-  // update output
-  private updateOutput(id: number, state: boolean) {
-    if (this.outputsHelper) this.outputsHelper.updateOutput(id, state)
+
+  // update low battery status
+  private updateStatusLowBattery(state: boolean) {
+    const battery = this.accessory.getService(this.hap.Service.BatteryService)
+    if (battery) {
+      if (state) {
+        this.log.warn("Battery Status: Low Battery")
+        battery.updateCharacteristic(this.hap.Characteristic.StatusLowBattery,
+          this.hap.Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW)
+      }
+      else {
+        this.log.info("Battery Status: Normal")
+        battery.updateCharacteristic(this.hap.Characteristic.StatusLowBattery,
+          this.hap.Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL)
+      }
+    }
   }
 
   // valid arming states

@@ -1,6 +1,8 @@
 // Ness D8/16 Aux accessory helper
 
 import { CharacteristicGetCallback, CharacteristicSetCallback, CharacteristicValue, HAP, Logger, PlatformAccessory, Service } from "homebridge";
+import { AuxiliaryOutputsUpdate, OutputsUpdate } from 'nessclient/build/event'
+import { AuxiliaryOutputType, OutputType } from 'nessclient/build/event-types'
 import { NessD16x, OutputConfig } from './index'
 
 const NO_ERRORS = null
@@ -21,11 +23,7 @@ export class NessOutputsHelper {
 	) {
 		this.hap = platform.api.hap
 		this.log = platform.log
-
-		// init status
-		for (var i = 1; i <= NOUTPUTS; ++i) {
-			this.status[i] = false
-		}
+		for (var i = 1; i <= NOUTPUTS; ++i) this.status[i] = false
 	}
 
 	// configure the accessory
@@ -44,7 +42,6 @@ export class NessOutputsHelper {
 		// configure output services
 		for (var output of this.outputs) {
 			if (1 <= output.id && output.id <= NOUTPUTS) {
-
 				let service = this.findRestored(this.hap.Service.Outlet.UUID, output.id)
 					|| this.accessory.addService(this.hap.Service.Outlet, output.label, output.id.toString());
 				service.displayName = output.label
@@ -53,7 +50,6 @@ export class NessOutputsHelper {
 					.on('set', this.setOn.bind(this, output.id, service))
 				this.addConfigured(service)
 				this.log.info("Configured: Output: " + output.id + ": " + output.label)
-
 			}
 		}
 		// remove any restored services not configured
@@ -66,13 +62,49 @@ export class NessOutputsHelper {
 		this.platform.api.updatePlatformAccessories([this.accessory])
 	}
 
+	// update auxiliary outputs state
+	public updateAuxilaryOutputs(event: AuxiliaryOutputsUpdate): void {
+		// kludge because ness client 2.2.0 does not provide access to private member _outputs
+		const outputs: AuxiliaryOutputType[] = JSON.parse(JSON.stringify(event))._outputs
+		for (var output of outputs) {
+			let id = null
+			switch (output) {
+				case AuxiliaryOutputType.AUX_1: id = 1; break
+				case AuxiliaryOutputType.AUX_2: id = 2; break
+				case AuxiliaryOutputType.AUX_3: id = 3; break
+				case AuxiliaryOutputType.AUX_4: id = 4; break
+				case AuxiliaryOutputType.AUX_5: id = 5; break
+				case AuxiliaryOutputType.AUX_6: id = 6; break
+				case AuxiliaryOutputType.AUX_7: id = 7; break
+				case AuxiliaryOutputType.AUX_8: id = 8; break
+			}
+			if (id) this.updateOutput(id, true)
+		}
+	}
+
 	// update output state
 	public updateOutput(id: number, state: boolean): void {
-		this.log.debug("Update Output: id: " + id + " state: " + state + " UUID: " + this.hap.Service.Outlet.UUID)
+		this.log.debug("Update Output: id: " + id + " state: " + state)
 		if (1 <= id && id <= NOUTPUTS) {
 			this.status[id] = state
 			const service = this.findConfigured(id)
 			if (service) service.updateCharacteristic(this.hap.Characteristic.On, state)
+		}
+	}
+
+	// update outputs state
+	public updateOutputs(event: OutputsUpdate): void {
+		// kludge because ness client 2.2.0 does not provide access to private member _outputs
+		const outputs: OutputType[] = JSON.parse(JSON.stringify(event))._outputs
+		for (var output of outputs) {
+			let id = null
+			switch (output) {
+				case OutputType.AUX1: id = 1; break
+				case OutputType.AUX2: id = 2; break
+				case OutputType.AUX3: id = 3; break
+				case OutputType.AUX4: id = 4; break
+			}
+			if (id) this.updateOutput(id, true)
 		}
 	}
 
