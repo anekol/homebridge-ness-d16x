@@ -74,7 +74,7 @@ export class NessPanelHelper {
     this.log.debug("Valid arming states: " + this.validArmingStates(this.excludeModes))
 
     // configure battery service
-    const battery = this.accessory.getService(this.hap.Service.BatteryService) ||
+    this.accessory.getService(this.hap.Service.BatteryService) ||
       this.accessory.addService(this.hap.Service.BatteryService)
 
     // configure outputs accessory
@@ -174,7 +174,7 @@ export class NessPanelHelper {
   private handleMiscAlarmsUpdate(event: MiscellaneousAlarmsUpdate) {
     // kludge because ness client 2.2.0 does not provide access to private member _includedAlarms
     const alarms: AlarmType[] = JSON.parse(JSON.stringify(event))._includedAlarms
-    for (var alarm of alarms) {
+    for (const alarm of alarms) {
       switch (alarm) {
         case AlarmType.PANEL_BATTERY_LOW:
         case AlarmType.PANEL_BATTERY_LOW2:

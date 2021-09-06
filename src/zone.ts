@@ -1,6 +1,5 @@
 // Zone accessory helper
 
-import { EventTransmissionCounters } from 'hap-nodejs/dist/lib/gen/HomeKit'
 import { CharacteristicGetCallback, HAP, Logger, PlatformAccessory, Service } from 'homebridge'
 import { NessD16x, SensorType, ZoneConfig } from './index'
 
@@ -27,7 +26,7 @@ export class NessZoneHelper {
   // configure
   public configure(): void {
     // register restored services
-    for (var s of this.accessory.services) {
+    for (const s of this.accessory.services) {
       this.log.debug('Restored service: ' + s.displayName + s.UUID)
       this.addRestored(s)
     }
