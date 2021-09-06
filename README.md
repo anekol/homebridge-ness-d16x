@@ -8,7 +8,7 @@ A Homebridge plugin to support the Ness D8x / D16x Security Panel and zone acces
 
 Requires an interface that supports [Ness D8x / D16x Serial Interface ASCII protocol](http://www.nesscorporation.com/Software/Ness_D8-D16_ASCII_protocol_rev13.pdf) eg.
 
-* [Usriot USR-TCP232-302](https://shop.usriot.com/RS232-to-Ethernet-converter.html)
+* [Usriot USR-TCP232-302](https://www.pusr.com/download/M0/USR-TCP232-302-User-Manual_V1.0.3.01.pdf)
 * [Ness IP232](http://nesscorporation.com/101-244.html)
 
 Night mode is not supported by the Ness D8x/D16x, but is provided as a no-op for use in Homekit rules.
@@ -20,3 +20,9 @@ Home mode (Ness Home/Monitor Mode) may not be configured on your panel. If Ness 
 # npm
 npm install homebridge-ness-d16x --save
 ```
+
+## Change Log
+* 0.0.4: 
+    * Add Outputs and AuxiliaryOutputs
+    * Add Low Battery
+    * Don't allow illegal characteristic values to be set

@@ -6,7 +6,9 @@ import { AuxiliaryOutputType, OutputType } from 'nessclient/build/event-types'
 import { NessD16x, OutputConfig } from './index'
 
 const NO_ERRORS = null
-const NOUTPUTS = 8
+const NAUXOUTPUTS = 8
+const NOUTPUTS = 4
+const MAXOUTPUTS = Math.max(NAUXOUTPUTS, NOUTPUTS)
 
 export class NessOutputsHelper {
 	private readonly configured: Service[] = []
@@ -23,7 +25,7 @@ export class NessOutputsHelper {
 	) {
 		this.hap = platform.api.hap
 		this.log = platform.log
-		for (var i = 1; i <= NOUTPUTS; ++i) this.status[i] = false
+		for (var i = 1; i <= MAXOUTPUTS; ++i) this.status[i] = false
 	}
 
 	// configure the accessory
@@ -66,6 +68,8 @@ export class NessOutputsHelper {
 	public updateAuxilaryOutputs(event: AuxiliaryOutputsUpdate): void {
 		// kludge because ness client 2.2.0 does not provide access to private member _outputs
 		const outputs: AuxiliaryOutputType[] = JSON.parse(JSON.stringify(event))._outputs
+		const status: boolean[] = []
+		for (var i = 1; i <= NAUXOUTPUTS; ++i) status[i] = false
 		for (var output of outputs) {
 			let id = null
 			switch (output) {
@@ -78,14 +82,15 @@ export class NessOutputsHelper {
 				case AuxiliaryOutputType.AUX_7: id = 7; break
 				case AuxiliaryOutputType.AUX_8: id = 8; break
 			}
-			if (id) this.updateOutput(id, true)
+			if (id) status[id] = true
 		}
+		for (var i = 1; i <= NAUXOUTPUTS; ++i) this.updateOutput(i, status[i])
 	}
 
 	// update output state
 	public updateOutput(id: number, state: boolean): void {
 		this.log.debug("Update Output: id: " + id + " state: " + state)
-		if (1 <= id && id <= NOUTPUTS) {
+		if (1 <= id && id <= MAXOUTPUTS) {
 			this.status[id] = state
 			const service = this.findConfigured(id)
 			if (service) service.updateCharacteristic(this.hap.Characteristic.On, state)
@@ -96,6 +101,8 @@ export class NessOutputsHelper {
 	public updateOutputs(event: OutputsUpdate): void {
 		// kludge because ness client 2.2.0 does not provide access to private member _outputs
 		const outputs: OutputType[] = JSON.parse(JSON.stringify(event))._outputs
+		const status: boolean[] = []
+		for (var i = 1; i <= NOUTPUTS; ++i) status[i] = false
 		for (var output of outputs) {
 			let id = null
 			switch (output) {
@@ -104,15 +111,16 @@ export class NessOutputsHelper {
 				case OutputType.AUX3: id = 3; break
 				case OutputType.AUX4: id = 4; break
 			}
-			if (id) this.updateOutput(id, true)
+			if (id) status[id] = true
 		}
+		for (var i = 1; i <= NOUTPUTS; ++i) this.updateOutput(i, status[i])
 	}
 
 	// get on 
 	private getOn(id: string, callback: CharacteristicGetCallback) {
 		this.log.debug('Get Output On: ' + id);
 		const iid = parseInt(id)
-		callback(NO_ERRORS, (1 <= iid && iid <= NOUTPUTS) ? this.status[iid] : false); ``
+		callback(NO_ERRORS, (1 <= iid && iid <= MAXOUTPUTS) ? this.status[iid] : false); ``
 	}
 
 	// set on
@@ -121,7 +129,7 @@ export class NessOutputsHelper {
 
 		// simulate read only by immediately reverting to current status
 		setTimeout((service) => {
-			this.updateOutput(id, (1 <= id && id <= NOUTPUTS) ? this.status[id] : false);
+			this.updateOutput(id, (1 <= id && id <= MAXOUTPUTS) ? this.status[id] : false);
 		}, 50, service);
 		callback(NO_ERRORS);
 	}
