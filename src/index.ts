@@ -1,4 +1,3 @@
-
 // Ness D8x/D16x alarm panel platform using NessClient
 
 // Change Log
@@ -32,8 +31,6 @@ module.exports = (api: API) => {
 }
 
 export class NessD16x implements DynamicPlatformPlugin {
-  private readonly Accessory: typeof PlatformAccessory;
-
   private readonly configured: PlatformAccessory[] = []
   private readonly hap: HAP
   private readonly host: string
@@ -53,7 +50,6 @@ export class NessD16x implements DynamicPlatformPlugin {
     public readonly api: API
   ) {
     this.hap = api.hap
-    this.Accessory = api.platformAccessory
 
     //  user config
     this.name = config.name as string || PLATFORM_NAME
@@ -78,7 +74,7 @@ export class NessD16x implements DynamicPlatformPlugin {
       const uuid = this.hap.uuid.generate(this.name + '_panel')
       let accessory = this.findRestored(uuid)
       if (!accessory) {
-        accessory = new this.Accessory(this.name, uuid, this.hap.Categories.SECURITY_SYSTEM)
+        accessory = new this.api.platformAccessory(this.name, uuid, this.hap.Categories.SECURITY_SYSTEM)
         this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory])
         this.log.info('Added new: ' + accessory.displayName)
       }
