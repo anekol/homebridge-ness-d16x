@@ -21,7 +21,8 @@ A Homebridge plugin to support the Ness D8x / D16x Security Panel and zone acces
 Requires an interface that supports [Ness D8x / D16x Serial Interface ASCII protocol](http://www.nesscorporation.com/Software/Ness_D8-D16_ASCII_protocol_rev13.pdf) eg.
 
 * [Usriot USR-TCP232-302](https://www.pusr.com/download/M0/USR-TCP232-302-User-Manual_V1.0.3.01.pdf)
-* [Ness IP232](http://nesscorporation.com/101-244.html)
+* [Ness IP232](https://ness.zendesk.com/hc/en-us/articles/360019149433-101-244-IP232-Module)
+  
 ### Homebridge
 Use the Homebridge UI homebridge-config-ui-x UI Plugins/Config or from the shell.
 ```sh
