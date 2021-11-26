@@ -75,7 +75,7 @@ export class NessPanelHelper {
     if (this.verboseLog)
       this.log.info("Valid arming states: " + this.validArmingStates(this.excludeModes))
 
-    // configure battery service||
+    // configure battery service
     this.accessory.getService(this.hap.Service.BatteryService) ||
       this.accessory.addService(this.hap.Service.BatteryService)
 
