@@ -39,6 +39,7 @@ export class NessD16x implements DynamicPlatformPlugin {
   private readonly nessClient: NessClient
   private readonly outputs: OutputConfig[]
   private readonly port: string = '2401'
+  private readonly verboseLog: boolean = false
   private readonly restored: PlatformAccessory[] = []
   private readonly excludeModes: ArmingMode[]
   private readonly zones: ZoneConfig[]
@@ -56,6 +57,7 @@ export class NessD16x implements DynamicPlatformPlugin {
     this.host = config.host as string || 'localhost'
     this.port = config.port as string || '2401'
     this.keypadCode = config.keypadCode as string || ''
+    this.verboseLog = config.verboseLog as boolean || false
     this.nessClient = new NessClient(this.host, +this.port)
 
     // map config strings to enums
@@ -78,7 +80,7 @@ export class NessD16x implements DynamicPlatformPlugin {
         this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory])
         this.log.info('Added new: ' + accessory.displayName)
       }
-      new NessPanelHelper(this, accessory, this.nessClient, this.keypadCode, this.excludeModes, this.outputs, this.zones).configure()
+      new NessPanelHelper(this, accessory, this.verboseLog, this.nessClient, this.keypadCode, this.excludeModes, this.outputs, this.zones).configure()
       this.log.info('Configured: ' + accessory.displayName)
       this.api.updatePlatformAccessories([accessory])
       this.addConfigured(accessory)

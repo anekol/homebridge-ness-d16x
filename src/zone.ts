@@ -1,6 +1,5 @@
 // Zone accessory helper
 
-import { EventTransmissionCounters } from 'hap-nodejs/dist/lib/gen/HomeKit'
 import { CharacteristicGetCallback, HAP, Logger, PlatformAccessory, Service } from 'homebridge'
 import { NessD16x, SensorType, ZoneConfig } from './index'
 
@@ -18,6 +17,7 @@ export class NessZoneHelper {
   constructor(
     private readonly platform: NessD16x,
     private readonly accessory: PlatformAccessory,
+    private readonly verboseLog: boolean,
     private readonly zone: ZoneConfig
   ) {
     this.hap = this.platform.api.hap
@@ -27,8 +27,9 @@ export class NessZoneHelper {
   // configure
   public configure(): void {
     // register restored services
-    for (var s of this.accessory.services) {
-      this.log.debug('Restored service: ' + s.displayName + s.UUID)
+    for (const s of this.accessory.services) {
+      if (this.verboseLog)
+        this.log.info('Restored service: ' + s.displayName + s.UUID)
       this.addRestored(s)
     }
 
@@ -86,7 +87,8 @@ export class NessZoneHelper {
   public zoneChanged(change: boolean): void {
     this.zoneChange = change
     if (this.service) {
-      this.log.debug('Zone changed: zone: ' + this.zone.id + ' state: ' + change)
+      if (this.verboseLog)
+        this.log.info('Zone changed: zone: ' + this.zone.id + ' state: ' + change)
       switch (this.zone.type) {
         case SensorType.CONTACT:
           this.service.updateCharacteristic(this.hap.Characteristic.ContactSensorState, this.zoneChange)
@@ -106,14 +108,16 @@ export class NessZoneHelper {
     const state = this.zoneChange
       ? this.hap.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED
       : this.hap.Characteristic.ContactSensorState.CONTACT_DETECTED
-    this.log.debug('Get ContactState: ' + state)
+    if (this.verboseLog)
+      this.log.info('Get ContactState:  zone: ' + this.zone.id + ' state: ' + state)
     callback(NO_ERRORS, state)
   }
 
   // handle getMotionDetected
   private getMotionDetected(callback: CharacteristicGetCallback) {
     const state = this.zoneChange
-    this.log.debug('Get MotionedDetected: ' + state)
+    if (this.verboseLog)
+      this.log.info('Get MotionedDetected: zone: ' + this.zone.id + ' state: ' + state)
     callback(NO_ERRORS, state)
   }
 
@@ -122,7 +126,8 @@ export class NessZoneHelper {
     const state = this.zoneChange
       ? this.hap.Characteristic.SmokeDetected.SMOKE_DETECTED
       : this.hap.Characteristic.SmokeDetected.SMOKE_NOT_DETECTED
-    this.log.debug('Get SmokeDetected: ' + state)
+    if (this.verboseLog)
+      this.log.info('Get SmokeDetected:  zone: ' + this.zone.id + ' state: ' + state)
     callback(NO_ERRORS, state)
   }
   // add service to configured list

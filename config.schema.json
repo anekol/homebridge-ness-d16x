@@ -33,6 +33,11 @@
         "default": "0000",
         "required": true
       },
+      "verboseLog": {
+        "description": "Enable verbose logging",
+        "type": "boolean",
+        "default": false
+      },
       "excludeModes": {
         "notitle": true,
         "type": "array",

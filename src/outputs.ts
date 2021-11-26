@@ -21,30 +21,34 @@ export class NessOutputsHelper {
 	constructor(
 		private readonly platform: NessD16x,
 		private readonly accessory: PlatformAccessory,
+		private readonly verboseLog: boolean,
 		private readonly outputs: OutputConfig[],
 	) {
 		this.hap = platform.api.hap
 		this.log = platform.log
-		for (var i = 1; i <= MAXOUTPUTS; ++i) this.status[i] = false
+		for (let i = 1; i <= MAXOUTPUTS; ++i) this.status[i] = false
 	}
 
 	// configure the accessory
 	public configure(): void {
 		// register restored services
-		for (var s of this.accessory.services) {
-			this.log.debug('Restored service: ' + s.displayName + ' subtype: ' + s.subtype + ': ' + s.UUID)
+		for (const s of this.accessory.services) {
+			if (this.verboseLog)
+				this.log.info('Restored service: ' + s.displayName + ' subtype: ' + s.subtype + ': ' + s.UUID)
 			this.addRestored(s)
 		}
 
 		// configure the information service
-		const info = this.accessory.getService(this.hap.Service.AccessoryInformation)!
-		if (info) info.setCharacteristic(this.hap.Characteristic.Manufacturer, 'Ness')
-		this.addConfigured(info)
+		const info = this.accessory.getService(this.hap.Service.AccessoryInformation)
+		if (info) {
+			info.setCharacteristic(this.hap.Characteristic.Manufacturer, 'Ness')
+			this.addConfigured(info)
+		}
 
 		// configure output services
-		for (var output of this.outputs) {
+		for (const output of this.outputs) {
 			if (1 <= output.id && output.id <= NOUTPUTS) {
-				let service = this.findRestored(this.hap.Service.Outlet.UUID, output.id)
+				const service = this.findRestored(this.hap.Service.Outlet.UUID, output.id)
 					|| this.accessory.addService(this.hap.Service.Outlet, output.label, output.id.toString());
 				service.displayName = output.label
 				service.getCharacteristic(this.hap.Characteristic.On)
@@ -69,8 +73,8 @@ export class NessOutputsHelper {
 		// kludge because ness client 2.2.0 does not provide access to private member _outputs
 		const outputs: AuxiliaryOutputType[] = JSON.parse(JSON.stringify(event))._outputs
 		const status: boolean[] = []
-		for (var i = 1; i <= NAUXOUTPUTS; ++i) status[i] = false
-		for (var output of outputs) {
+		for (let i = 1; i <= NAUXOUTPUTS; ++i) status[i] = false
+		for (const output of outputs) {
 			let id = null
 			switch (output) {
 				case AuxiliaryOutputType.AUX_1: id = 1; break
@@ -84,12 +88,13 @@ export class NessOutputsHelper {
 			}
 			if (id) status[id] = true
 		}
-		for (var i = 1; i <= NAUXOUTPUTS; ++i) this.updateOutput(i, status[i])
+		for (let i = 1; i <= NAUXOUTPUTS; ++i) this.updateOutput(i, status[i])
 	}
 
 	// update output state
 	public updateOutput(id: number, state: boolean): void {
-		this.log.debug("Update Output: id: " + id + " state: " + state)
+		if (this.verboseLog)
+			this.log.info("Update Output: id: " + id + " state: " + state)
 		if (1 <= id && id <= MAXOUTPUTS) {
 			this.status[id] = state
 			const service = this.findConfigured(id)
@@ -102,8 +107,8 @@ export class NessOutputsHelper {
 		// kludge because ness client 2.2.0 does not provide access to private member _outputs
 		const outputs: OutputType[] = JSON.parse(JSON.stringify(event))._outputs
 		const status: boolean[] = []
-		for (var i = 1; i <= NOUTPUTS; ++i) status[i] = false
-		for (var output of outputs) {
+		for (let i = 1; i <= NOUTPUTS; ++i) status[i] = false
+		for (const output of outputs) {
 			let id = null
 			switch (output) {
 				case OutputType.AUX1: id = 1; break
@@ -113,24 +118,26 @@ export class NessOutputsHelper {
 			}
 			if (id) status[id] = true
 		}
-		for (var i = 1; i <= NOUTPUTS; ++i) this.updateOutput(i, status[i])
+		for (let i = 1; i <= NOUTPUTS; ++i) this.updateOutput(i, status[i])
 	}
 
 	// get on 
 	private getOn(id: string, callback: CharacteristicGetCallback) {
-		this.log.debug('Get Output On: ' + id);
+		if (this.verboseLog)
+			this.log.info('Get Output On: ' + id);
 		const iid = parseInt(id)
 		callback(NO_ERRORS, (1 <= iid && iid <= MAXOUTPUTS) ? this.status[iid] : false); ``
 	}
 
 	// set on
 	private setOn(id: number, service: Service, value: CharacteristicValue, callback: CharacteristicSetCallback) {
-		this.log.debug('Set Output On: ' + service.subtype + ": value: " + value);
+		if (this.verboseLog)
+			this.log.info('Set Output On: ' + service.subtype + ": value: " + value);
 
 		// simulate read only by immediately reverting to current status
-		setTimeout((service) => {
+		setTimeout(() => {
 			this.updateOutput(id, (1 <= id && id <= MAXOUTPUTS) ? this.status[id] : false);
-		}, 50, service);
+		}, 50);
 		callback(NO_ERRORS);
 	}
 
