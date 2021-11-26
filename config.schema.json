@@ -132,6 +132,7 @@
         "keypadCode"
       ]
     },
+    "verboseLog",
     {
       "type": "section",
       "title": "Arming Modes to exclude",
@@ -140,6 +141,7 @@
         "excludeModes"
       ]
     },
+    
     {
       "type": "section",
       "title": "Outputs",

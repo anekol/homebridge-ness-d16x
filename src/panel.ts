@@ -76,7 +76,8 @@ export class NessPanelHelper {
       this.log.info("Valid arming states: " + this.validArmingStates(this.excludeModes))
 
     // configure battery service||
-    this.accessory.addService(this.hap.Service.BatteryService)
+    this.accessory.getService(this.hap.Service.BatteryService) ||
+      this.accessory.addService(this.hap.Service.BatteryService)
 
     // configure outputs accessory
     if (0 < this.outputs.length) {
@@ -404,8 +405,6 @@ export class NessPanelHelper {
 
   // handle NessClient zone change
   private zoneChanged(state: [zone: number, change: boolean]) {
-    if (this.verboseLog)
-      this.log.info("zoneChanged: zone: " + state[0], " change: " + state[1])
     const helper = this.zoneHelpers[state[0] - 1]
     if (helper) helper.zoneChanged(state[1])
   }
