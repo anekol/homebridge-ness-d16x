@@ -90,7 +90,7 @@ export class NessPanelHelper {
         this.log.info('Added new accessory: ' + accessory.displayName);
       }
       // wrap with accessory handler
-      this.outputsHelper = new NessOutputsHelper(this.platform, accessory, this.verboseLog, this.outputs)
+      this.outputsHelper = new NessOutputsHelper(this.platform, accessory, this.verboseLog, this.nessClient, this.outputs)
       this.outputsHelper.configure()
       this.api.updatePlatformAccessories([accessory])
       this.platform.addConfigured(accessory)

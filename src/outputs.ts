@@ -1,6 +1,7 @@
 // Ness D8/16 Aux accessory helper
 
 import { CharacteristicGetCallback, CharacteristicSetCallback, CharacteristicValue, HAP, Logger, PlatformAccessory, Service } from "homebridge";
+import { NessClient } from "nessclient";
 import { AuxiliaryOutputsUpdate, OutputsUpdate } from 'nessclient/build/event'
 import { AuxiliaryOutputType, OutputType } from 'nessclient/build/event-types'
 import { NessD16x, OutputConfig } from './index'
@@ -22,6 +23,7 @@ export class NessOutputsHelper {
 		private readonly platform: NessD16x,
 		private readonly accessory: PlatformAccessory,
 		private readonly verboseLog: boolean,
+		private readonly nessClient: NessClient,
 		private readonly outputs: OutputConfig[],
 	) {
 		this.hap = platform.api.hap
@@ -52,7 +54,7 @@ export class NessOutputsHelper {
 					|| this.accessory.addService(this.hap.Service.Outlet, output.label, output.id.toString());
 				service.displayName = output.label
 				service.getCharacteristic(this.hap.Characteristic.On)
-					.on('get', this.getOn.bind(this, output.id.toString()))
+					.on('get', this.getOn.bind(this, output.id))
 					.on('set', this.setOn.bind(this, output.id, service))
 				this.addConfigured(service)
 				this.log.info("Configured: Output: " + output.id + ": " + output.label)
@@ -122,22 +124,17 @@ export class NessOutputsHelper {
 	}
 
 	// get on 
-	private getOn(id: string, callback: CharacteristicGetCallback) {
+	private getOn(id: number, callback: CharacteristicGetCallback) {
 		if (this.verboseLog)
 			this.log.info('Get Output On: ' + id);
-		const iid = parseInt(id)
-		callback(NO_ERRORS, (1 <= iid && iid <= MAXOUTPUTS) ? this.status[iid] : false); ``
+		callback(NO_ERRORS, (1 <= id && id <= MAXOUTPUTS) ? this.status[id] : false); ``
 	}
 
 	// set on
 	private setOn(id: number, service: Service, value: CharacteristicValue, callback: CharacteristicSetCallback) {
 		if (this.verboseLog)
 			this.log.info('Set Output On: ' + service.subtype + ": value: " + value);
-
-		// simulate read only by immediately reverting to current status
-		setTimeout(() => {
-			this.updateOutput(id, (1 <= id && id <= MAXOUTPUTS) ? this.status[id] : false);
-		}, 50);
+		this.nessClient.aux(id, 0 < value)
 		callback(NO_ERRORS);
 	}
 

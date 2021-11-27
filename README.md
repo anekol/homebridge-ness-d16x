@@ -10,7 +10,7 @@ A Homebridge plugin to support the Ness D8x / D16x Security Panel and zone acces
 
 * Night mode is not supported by the Ness D8x/D16x, but is provided as a no-op for use in Homekit rules.
 
-* Outputs are modelled as simulated read-only "Outlets".
+* AUX Outputs are modelled as "Outlets". Turn On/Off, behaviour is determined by panel setup (eg see P141E 4E/P141E 8E for AUX1 enabled/disabled/toggle/latch )
 
 <a href="readme/panel.png"><img src="readme/panel.png" alt="panel" width="100"/></a>
 <a href="readme/outputs.png"><img src="readme/outputs.png" alt="panel" width="100"/></a>

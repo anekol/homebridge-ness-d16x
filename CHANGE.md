@@ -1,4 +1,6 @@
 ## Change Log
+* 0.0.6: 
+    * Add ability to control AUX outputs
 * 0.0.5: 
     * Add verbose logging option
 * 0.0.4: 
