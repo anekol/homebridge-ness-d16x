@@ -30,13 +30,11 @@ $ npm install homebridge-ness-d16x --save
 ```
 
 ## Support and Issues
-* For support requests please use the [homebridge-ness-d16x](https://forums.whirlpool.net.au/thread/3jm6pwkq) thread at Whirlpool.
+* For support please use the [homebridge-ness-d16x](https://forums.whirlpool.net.au/thread/3jm6pwkq) thread at Whirlpool.
 
 * Please use the Issues tracker only for:
-  * Bug reports
+  * Proposing/discussing development/enhancement issues
   * Submitting pull requests
-    
-A bug is either a _demonstrable problem_ that is caused by the code in the repository,
-or missing, unclear, or misleading documentation. Good bug reports are very 
-welcome - thank you!
+  * Bug reports - where a bug is either a _demonstrable problem_ that is caused by the code in the repository,
+or missing, unclear, or misleading documentation. Good bug reports are very welcome - thank you!
 
