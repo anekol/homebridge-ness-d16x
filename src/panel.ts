@@ -30,6 +30,7 @@ export class NessPanelHelper {
   private panelState: ArmingState = ArmingState.UNKNOWN
   private targetPanelState: ArmingState = ArmingState.UNKNOWN
   private zoneHelpers = new Array<NessZoneHelper>(NZONES)
+  private retry_count = 0
 
   // constructor
   constructor(
@@ -120,12 +121,10 @@ export class NessPanelHelper {
       }
     }
 
-    // try to connect to interface
-    this.nessClient.connect()
-
-    // on interface connection
+    // setup callback for on interface connection
     this.nessClient.onConnection(() => {
       this.log.info('Interface: Connected: host: ' + this.nessClient.host + ' port: ' + this.nessClient.port)
+      this.retry_count = 0
 
       // get panel status and details - don't issue commands too quickly
       setTimeout(() => this.nessClient.sendCommand(NESS_STATUS_OUTPUTS), 5000)
@@ -134,11 +133,28 @@ export class NessPanelHelper {
       setTimeout(() => this.nessClient.sendCommand(NESS_STATUS_VERSION), 5000)
     })
 
-    // on interface connection error
+    // setup callback for on interface connection error
     this.nessClient.onConnectionError((error) => {
-      this.log.error('Interface: ' + error)
-      this.platform.removeAllConfigured()
+      if (this.retry_count < 5) {
+        this.retry_count = this.retry_count + 1
+        if (this.verboseLog) {
+          this.log.error('Interface: ' + error)
+          this.log.info('Interface: Retry to connect attempt ' + this.retry_count +
+            ': host: ' + this.nessClient.host + ' port: ' + this.nessClient.port)
+        }
+        this.nessClient.connect()
+      } else {
+        if (this.verboseLog)
+          this.log.info('Interface: Giving up trying to connect, retry count exceeded: ' + this.retry_count)
+        this.log.error('Interface: ' + error + ' - Removing all configured from platform')
+        this.platform.removeAllConfigured()
+      }
     })
+
+    // try to connect to interface
+    if (this.verboseLog)
+      this.log.info('Interface: Trying to connect: host: ' + this.nessClient.host + ' port: ' + this.nessClient.port)
+    this.nessClient.connect()
   }
 
   // handle NessClient ArmingState change

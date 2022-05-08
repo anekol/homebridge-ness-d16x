@@ -1,9 +1,15 @@
 // Ness D8x/D16x alarm panel platform using NessClient
 
 // Change Log
+// 0.0.7
+// * add retry logic on interface connection errors
+// 0.0.6
+// * add ability to control AUX outputs
+// 0.0.5
+// * add verbose logging
 // 0.0.4: 
-//  * Add support for Outputs and AuxiliaryOutputs, add low battery alarm
-//  * Ensure illegal characteristic values are not set on unknown arming state
+// * Add support for Outputs and AuxiliaryOutputs, add low battery alarm
+// * Ensure illegal characteristic values are not set on unknown arming state
 
 /* eslint-disable no-unused-vars */
 import { API, APIEvent, DynamicPlatformPlugin, HAP, Logger, PlatformAccessory, PlatformConfig } from 'homebridge'
@@ -117,7 +123,11 @@ export class NessD16x implements DynamicPlatformPlugin {
 
   // remove all configured accessories
   public removeAllConfigured(): void {
-    this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, this.configured)
-    this.configured.slice()
+    for (const c of this.configured) {
+      if (this.verboseLog)
+        this.log.info("removeAllConfigured: " + c.displayName)
+      this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [c])
+    }
+    this.configured.length = 0
   }
 }
