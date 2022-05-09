@@ -77,8 +77,8 @@ export class NessPanelHelper {
       this.log.info("Valid arming states: " + this.validArmingStates(this.excludeModes))
 
     // configure battery service
-    this.accessory.getService(this.hap.Service.BatteryService) ||
-      this.accessory.addService(this.hap.Service.BatteryService)
+    this.accessory.getService(this.hap.Service.Battery) ||
+      this.accessory.addService(this.hap.Service.Battery)
 
     // configure outputs accessory
     if (0 < this.outputs.length) {
@@ -387,7 +387,7 @@ export class NessPanelHelper {
 
   // update low battery status
   private updateStatusLowBattery(state: boolean) {
-    const battery = this.accessory.getService(this.hap.Service.BatteryService)
+    const battery = this.accessory.getService(this.hap.Service.Battery)
     if (battery) {
       if (state) {
         this.log.warn("Battery Status: Low Battery")
