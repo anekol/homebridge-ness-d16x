@@ -120,14 +120,4 @@ export class NessD16x implements DynamicPlatformPlugin {
   public findRestored(uuid: string): PlatformAccessory | undefined {
     return this.restored.find(a => a.UUID === uuid)
   }
-
-  // remove all configured accessories
-  public removeAllConfigured(): void {
-    for (const c of this.configured) {
-      if (this.verboseLog)
-        this.log.info("removeAllConfigured: " + c.displayName)
-      this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [c])
-    }
-    this.configured.length = 0
-  }
 }

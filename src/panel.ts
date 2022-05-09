@@ -31,6 +31,8 @@ export class NessPanelHelper {
   private targetPanelState: ArmingState = ArmingState.UNKNOWN
   private zoneHelpers = new Array<NessZoneHelper>(NZONES)
   private retry_count = 0
+  private retry_delay = 2 // retry_delay ** retry_count secs
+  private retry_limit = 5 // retry exponential limit
 
   // constructor
   constructor(
@@ -126,6 +128,12 @@ export class NessPanelHelper {
       this.log.info('Interface: Connected: host: ' + this.nessClient.host + ' port: ' + this.nessClient.port)
       this.retry_count = 0
 
+      // set StatusFault NO_FAULT
+      const security = this.accessory.getService(this.hap.Service.SecuritySystem)
+      if (security)
+        security.updateCharacteristic(this.hap.Characteristic.StatusFault,
+          this.hap.Characteristic.StatusFault.NO_FAULT)
+
       // get panel status and details - don't issue commands too quickly
       setTimeout(() => this.nessClient.sendCommand(NESS_STATUS_OUTPUTS), 5000)
       setTimeout(() => this.nessClient.sendCommand(NESS_STATUS_AUXOUTPUTS), 5000)
@@ -135,20 +143,24 @@ export class NessPanelHelper {
 
     // setup callback for on interface connection error
     this.nessClient.onConnectionError((error) => {
-      if (this.retry_count < 5) {
-        this.retry_count = this.retry_count + 1
-        if (this.verboseLog) {
-          this.log.error('Interface: ' + error)
-          this.log.info('Interface: Retry to connect attempt ' + this.retry_count +
-            ': host: ' + this.nessClient.host + ' port: ' + this.nessClient.port)
-        }
-        this.nessClient.connect()
-      } else {
-        if (this.verboseLog)
-          this.log.info('Interface: Giving up trying to connect, retry count exceeded: ' + this.retry_count)
-        this.log.error('Interface: ' + error + ' - Removing all configured from platform')
-        this.platform.removeAllConfigured()
+      this.log.info('Interface: ' + error)
+
+      // set StatusFault GENERAL_FAULT
+      const security = this.accessory.getService(this.hap.Service.SecuritySystem)
+      if (security) {
+        security.updateCharacteristic(this.hap.Characteristic.StatusFault,
+          this.hap.Characteristic.StatusFault.GENERAL_FAULT)
       }
+
+      // try to re-connect after delay
+      if (this.retry_count < this.retry_limit)
+        this.retry_count = this.retry_count + 1
+      const delay = this.retry_delay ** this.retry_count
+      this.log.info('Interface: Retry to connect in ' + delay + "secs ...")
+      setTimeout(() => {
+        this.log.info('Interface: Trying to connect: host: ' + this.nessClient.host + ' port: ' + this.nessClient.port)
+        this.nessClient.connect()
+      }, delay * 1000);
     })
 
     // try to connect to interface
