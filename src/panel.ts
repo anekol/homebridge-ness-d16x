@@ -32,7 +32,7 @@ export class NessPanelHelper {
   private zoneHelpers = new Array<NessZoneHelper>(NZONES)
   private retry_count = 0
   private retry_delay = 2 // retry_delay ** retry_count secs
-  private retry_limit = 5 // retry exponential limit
+  private retry_limit = 6 // retry exponential limit 2 ** 6 == 64 secs
 
   // constructor
   constructor(
@@ -156,7 +156,7 @@ export class NessPanelHelper {
       if (this.retry_count < this.retry_limit)
         this.retry_count = this.retry_count + 1
       const delay = this.retry_delay ** this.retry_count
-      this.log.info('Interface: Retry to connect in ' + delay + "secs ...")
+      this.log.info('Interface: Retry to connect in ' + delay + " secs ...")
       setTimeout(() => {
         this.log.info('Interface: Trying to connect: host: ' + this.nessClient.host + ' port: ' + this.nessClient.port)
         this.nessClient.connect()
