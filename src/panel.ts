@@ -1,7 +1,7 @@
 // Ness D8/16 Panel accessory helper
 
 import {
-  API, CharacteristicGetCallback, CharacteristicSetCallback, CharacteristicValue,
+  API, CharacteristicSetCallback, CharacteristicValue,
   HAP, Logger, PlatformAccessory
 } from 'homebridge'
 import { ArmingState, NessClient } from 'nessclient'
@@ -19,7 +19,7 @@ const NESS_STATUS_AUXOUTPUTS = 'S18'
 const NESS_STATUS_OUTPUTS = 'S15'
 const NESS_STATUS_MISC_ALARMS = 'S13'
 const NESS_STATUS_VERSION = 'S17'
-const NESS_STATUS_VIEW_STATE = 'S16'
+// const NESS_STATUS_VIEW_STATE = 'S16'
 const NZONES = 16
 
 export class NessPanelHelper {
@@ -73,7 +73,7 @@ export class NessPanelHelper {
 
     // list characteristics
     if (this.verboseLog) {
-      for (var c of security.characteristics) {
+      for (const c of security.characteristics) {
         this.log.info("SecuritySystem: " + c.displayName)
       }
     }
@@ -266,7 +266,9 @@ export class NessPanelHelper {
   // handle view state update
   private handleViewStateUpdate(event: ViewStateUpdate) {
     // kludge because ness client 2.2.0 does not provide access to private member _state
-    const state: State[] = JSON.parse(JSON.stringify(event))._state
+    const states: State[] = JSON.parse(JSON.stringify(event))._state
+    if (this.verboseLog)
+      this.log.info("ViewStateUpdate: states: " + JSON.stringify(states))
   }
 
 

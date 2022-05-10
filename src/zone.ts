@@ -1,9 +1,7 @@
 // Zone accessory helper
 
-import { CharacteristicGetCallback, HAP, Logger, PlatformAccessory, Service } from 'homebridge'
+import { HAP, Logger, PlatformAccessory, Service } from 'homebridge'
 import { NessD16x, SensorType, ZoneConfig } from './index'
-
-const NO_ERRORS = null
 
 export class NessZoneHelper {
   private readonly configured: Service[] = []
