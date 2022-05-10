@@ -2,7 +2,7 @@
 
 // Change Log
 // 0.0.8
-// * change retry algorithm to not remove configurations and to keep trying
+// * reworked interface connection logic with heartbeat and error support
 // 0.0.7
 // * add retry logic on interface connection errors
 // 0.0.6
@@ -24,7 +24,8 @@ export enum ArmingMode {
   AWAY = 'AWAY',
   HOME = 'HOME',
   NIGHT = 'NIGHT',
-  OFF = 'OFF'
+  OFF = 'OFF',
+  TRIGGERED = 'TRIGGERED'
 }
 export enum SensorType {
   CONTACT = 'CONTACT',

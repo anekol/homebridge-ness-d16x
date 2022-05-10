@@ -42,26 +42,19 @@ export class NessZoneHelper {
       this.addConfigured(info)
     }
 
-
     // configure the sensor service
     switch (this.zone.type) {
       case SensorType.CONTACT:
         this.service = this.findRestored(this.hap.Service.ContactSensor.UUID) ||
           this.accessory.addService(this.hap.Service.ContactSensor)
-        this.service.getCharacteristic(this.hap.Characteristic.ContactSensorState)
-          .on('get', this.getContactSensorState.bind(this))
         break
       case SensorType.MOTION:
         this.service = this.findRestored(this.hap.Service.MotionSensor.UUID) ||
           this.accessory.addService(this.hap.Service.MotionSensor)
-        this.service.getCharacteristic(this.hap.Characteristic.MotionDetected)
-          .on('get', this.getMotionDetected.bind(this))
         break
       case SensorType.SMOKE:
         this.service = this.findRestored(this.hap.Service.SmokeSensor.UUID) ||
           this.accessory.addService(this.hap.Service.SmokeSensor)
-        this.service.getCharacteristic(this.hap.Characteristic.SmokeDetected)
-          .on('get', this.getSmokeDetected.bind(this))
         break
       default:
         this.log.error('Zone sensor type not known: zone: ' + this.zone.id + ' type: ' + this.zone.type)
@@ -103,33 +96,6 @@ export class NessZoneHelper {
     }
   }
 
-  // handle getContact State
-  private getContactSensorState(callback: CharacteristicGetCallback) {
-    const state = this.zoneChange
-      ? this.hap.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED
-      : this.hap.Characteristic.ContactSensorState.CONTACT_DETECTED
-    if (this.verboseLog)
-      this.log.info('Get ContactState:  zone: ' + this.zone.id + ' state: ' + state)
-    callback(NO_ERRORS, state)
-  }
-
-  // handle getMotionDetected
-  private getMotionDetected(callback: CharacteristicGetCallback) {
-    const state = this.zoneChange
-    if (this.verboseLog)
-      this.log.info('Get MotionedDetected: zone: ' + this.zone.id + ' state: ' + state)
-    callback(NO_ERRORS, state)
-  }
-
-  // handle getSmokeDetected
-  private getSmokeDetected(callback: CharacteristicGetCallback) {
-    const state = this.zoneChange
-      ? this.hap.Characteristic.SmokeDetected.SMOKE_DETECTED
-      : this.hap.Characteristic.SmokeDetected.SMOKE_NOT_DETECTED
-    if (this.verboseLog)
-      this.log.info('Get SmokeDetected:  zone: ' + this.zone.id + ' state: ' + state)
-    callback(NO_ERRORS, state)
-  }
   // add service to configured list
   private addConfigured(service: Service): void {
     this.configured.push(service)

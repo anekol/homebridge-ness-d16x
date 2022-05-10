@@ -1,6 +1,6 @@
 // Ness D8/16 Aux accessory helper
 
-import { CharacteristicGetCallback, CharacteristicSetCallback, CharacteristicValue, HAP, Logger, PlatformAccessory, Service } from "homebridge";
+import { CharacteristicSetCallback, CharacteristicValue, HAP, Logger, PlatformAccessory, Service } from "homebridge";
 import { NessClient } from "nessclient";
 import { AuxiliaryOutputsUpdate, OutputsUpdate } from 'nessclient/build/event'
 import { AuxiliaryOutputType, OutputType } from 'nessclient/build/event-types'
@@ -54,7 +54,6 @@ export class NessOutputsHelper {
 					|| this.accessory.addService(this.hap.Service.Outlet, output.label, output.id.toString());
 				service.displayName = output.label
 				service.getCharacteristic(this.hap.Characteristic.On)
-					.on('get', this.getOn.bind(this, output.id))
 					.on('set', this.setOn.bind(this, output.id, service))
 				this.addConfigured(service)
 				this.log.info("Configured: Output: " + output.id + ": " + output.label)
@@ -121,13 +120,6 @@ export class NessOutputsHelper {
 			if (id) status[id] = true
 		}
 		for (let i = 1; i <= NOUTPUTS; ++i) this.updateOutput(i, status[i])
-	}
-
-	// get on 
-	private getOn(id: number, callback: CharacteristicGetCallback) {
-		if (this.verboseLog)
-			this.log.info('Get Output On: ' + id);
-		callback(NO_ERRORS, (1 <= id && id <= MAXOUTPUTS) ? this.status[id] : false); ``
 	}
 
 	// set on
