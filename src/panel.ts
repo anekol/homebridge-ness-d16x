@@ -362,7 +362,7 @@ export class NessPanelHelper {
           this.log.info('stateChanged: ' + state + ' update hap to: ' + this.hapStateText(hapState))
         this.updateSecuritySystemCurrentState(hapState)
       } else {
-        let targetHapState = this.panelToTargetHap(state)
+        const targetHapState = this.panelToTargetHap(state)
         if (0 < targetHapState) {
           if (this.verboseLog)
             this.log.info('targetStateChanged: ' + state + ' update targetHap to: ' + this.hapStateText(hapState))
