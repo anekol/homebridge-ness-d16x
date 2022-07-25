@@ -285,6 +285,12 @@ export class NessPanelHelper {
         return 'HOME'
       case this.hap.Characteristic.SecuritySystemCurrentState.ALARM_TRIGGERED:
         return 'TRIGGERED'
+      case this.hap.Characteristic.SecuritySystemTargetState.AWAY_ARM:
+        return 'AWAY_ARM'
+        break
+      case this.hap.Characteristic.SecuritySystemTargetState.DISARM:
+        return 'DISARM'
+        break
       default:
         return 'NOT KNOWN'
     }
@@ -319,26 +325,52 @@ export class NessPanelHelper {
     }
     return hapState
   }
+
+  // map panel state to hap state
+  private panelToTargetHap(panelState: ArmingState) {
+    let targetHapState = -1
+    switch (panelState) {
+      case ArmingState.ARMING:
+        targetHapState = this.hap.Characteristic.SecuritySystemTargetState.AWAY_ARM
+        break
+      case ArmingState.ENTRY_DELAY:
+        targetHapState = this.hap.Characteristic.SecuritySystemTargetState.DISARM
+        break
+      case ArmingState.EXIT_DELAY:
+        targetHapState = this.hap.Characteristic.SecuritySystemTargetState.AWAY_ARM
+        break
+      default:
+        this.log.error('Panel state change not known: panel state: ' + panelState)
+    }
+    return targetHapState
+  }
   // handle NessClient ArmingState change
   private stateChanged(state: ArmingState): void {
     this.log.info("Arming state changed: " + state)
     this.currentPanelState = state
-    let changedHapState = this.panelToHap(state)
+    let hapState = this.panelToHap(state)
     const security = this.accessory.getService(this.hap.Service.SecuritySystem)
     if (security) {
       const targetPanelHapState = security.getCharacteristic(this.hap.Characteristic.SecuritySystemTargetState).value
       // DISARMED is the target panel state for target hap of NIGHT
       if (targetPanelHapState === this.hap.Characteristic.SecuritySystemTargetState.NIGHT_ARM &&
-        changedHapState === this.hap.Characteristic.SecuritySystemCurrentState.DISARMED) {
-        changedHapState = this.hap.Characteristic.SecuritySystemCurrentState.NIGHT_ARM
+        hapState === this.hap.Characteristic.SecuritySystemCurrentState.DISARMED) {
+        hapState = this.hap.Characteristic.SecuritySystemCurrentState.NIGHT_ARM
       }
-      if (0 < changedHapState) {
+      if (0 < hapState) {
         if (this.verboseLog)
-          this.log.info('stateChanged: ' + state + ' update hap to: ' + this.hapStateText(changedHapState))
-        this.updateSecuritySystemCurrentState(changedHapState)
+          this.log.info('stateChanged: ' + state + ' update hap to: ' + this.hapStateText(hapState))
+        this.updateSecuritySystemCurrentState(hapState)
       } else {
-        if (this.verboseLog)
-          this.log.info('stateChanged: state not known: ' + state)
+        let targetHapState = this.panelToTargetHap(state)
+        if (0 < targetHapState) {
+          if (this.verboseLog)
+            this.log.info('targetStateChanged: ' + state + ' update targetHap to: ' + this.hapStateText(hapState))
+          this.updateSecuritySystemTargetState(targetHapState)
+        } else {
+          if (this.verboseLog)
+            this.log.info('stateChanged: state not known: ' + state)
+        }
       }
     }
   }
