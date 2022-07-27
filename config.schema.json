@@ -45,8 +45,7 @@
         "items": {
           "type": "string",
           "enum": [
-            "Home",
-            "Night"
+            "Home"
           ]
         }
       },
@@ -141,7 +140,6 @@
         "excludeModes"
       ]
     },
-    
     {
       "type": "section",
       "title": "Outputs",

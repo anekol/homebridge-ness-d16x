@@ -6,9 +6,16 @@
 
 A Homebridge plugin to support the Ness D8x / D16x Security Panel and zone accessories.
 
-* Home mode (Ness Home/Monitor Mode) may not be configured on your panel. If Ness Home/Monitor Mode is not configured on your panel and you don't exclude mode "Home", be aware that selecting Away followed by Home will not disarm the panel (Night or Off will).
+* Mode mapping
+  
+  | Homebridge | Ness          |
+  | ---------- | ------------- |
+  | Home       | Armed Home    |
+  | Away       | Armed Away    |
+  | Night      | Not Supported |
+  | Off        | Disarmed      |
 
-* Night mode is not supported by the Ness D8x/D16x, but is provided as a no-op for use in Homekit rules.
+* Be aware that if Ness Home/Monitor Mode is not configured on your panel and you don't exclude mode "Home" in your settings, then selecting Away followed by Home will NOT disarm the panel (Off will).
 
 * AUX Outputs are modelled as "Outlets". Turn On/Off, behaviour is determined by panel setup (eg see P141E 4E/P141E 8E for AUX1 enabled/disabled/toggle/latch )
 
@@ -37,4 +44,3 @@ $ npm install homebridge-ness-d16x --save
   * Submitting pull requests
   * Bug reports - where a bug is either a _demonstrable problem_ that is caused by the code in the repository,
 or missing, unclear, or misleading documentation. Good bug reports are very welcome - thank you!
-
