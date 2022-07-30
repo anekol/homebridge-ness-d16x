@@ -66,6 +66,7 @@ export class NessPanelHelper {
     // configure the security service
     const security = this.accessory.getService(this.hap.Service.SecuritySystem) ||
       this.accessory.addService(this.hap.Service.SecuritySystem)
+
     // set arbitary states and wait for status update
     this.updateSecuritySystemCurrentState(this.hap.Characteristic.SecuritySystemCurrentState.DISARMED)
     this.updateSecuritySystemTargetState(this.hap.Characteristic.SecuritySystemCurrentState.DISARMED)
@@ -355,6 +356,7 @@ export class NessPanelHelper {
         this.log.error('Request not known:' + targetState)
         callback(new Error('Request: not known: ' + targetState))
     }
+
     callback(NO_ERRORS)
   }
 
