@@ -15,6 +15,7 @@ import { NessOutputsHelper } from './outputs'
 import { NessZoneHelper } from './zone'
 
 const NO_ERRORS = null
+const NESS_CLIENT_UPDATE_POLL = 60 // nessclient.connect() schedules nessclient.update() for every 60 secs
 const NESS_STATUS_AUXOUTPUTS = 'S18'
 const NESS_STATUS_OUTPUTS = 'S15'
 const NESS_STATUS_MISC_ALARMS = 'S13'
@@ -23,20 +24,17 @@ const NESS_STATUS_VERSION = 'S17'
 const NZONES = 16
 
 export class NessPanelHelper {
-
   private readonly api: API
-  private readonly connect_poll = 90 // nessclient.connect() schedules nessclient.update() to be called every 60 secs
-  private readonly connect_retry_wait = 2 // retry after connect_retry_wait secs
-  private readonly connect_retry_limit = 5 // give up and wait for poll after connect_retry_limit tries
+  private readonly connect_poll = 90 // poll period in secs - NESS_CLIENT_UPDATE_POLL should be < connect_poll
+  private readonly connect_retry_wait = 2 // retry wait period in secs
+  private readonly connect_retry_limit = 5 // after this number of retries, give up and wait for poll
   private readonly hap: HAP
   private readonly log: Logger
-  private currentPanelState: ArmingState = ArmingState.DISARMED
+  private panelState: ArmingState = ArmingState.UNKNOWN
   private last_event_received = new Date()
   private outputsHelper: NessOutputsHelper | null = null
-  private targetPanelState: ArmingState = ArmingState.DISARMED
   private zoneHelpers = new Array<NessZoneHelper>(NZONES)
   private connect_retry_count = 0
-
 
   // constructor
   constructor(
@@ -58,7 +56,7 @@ export class NessPanelHelper {
   public configure(): void {
     // configure NessClient event listeners
     this.nessClient.onEventReceived(this.eventReceived.bind(this))
-    this.nessClient.onStateChange(this.stateChanged.bind(this))
+    this.nessClient.onStateChange(this.panelStateChanged.bind(this))
     this.nessClient.onZoneChange(this.zoneChanged.bind(this))
 
     // configure the information service
@@ -68,10 +66,11 @@ export class NessPanelHelper {
     // configure the security service
     const security = this.accessory.getService(this.hap.Service.SecuritySystem) ||
       this.accessory.addService(this.hap.Service.SecuritySystem)
-    this.updateSecuritySystemCurrentState(this.panelToHap(this.currentPanelState))
-    this.updateSecuritySystemTargetState(this.panelToHap(this.targetPanelState))
+    // set arbitary states and wait for status update
+    this.updateSecuritySystemCurrentState(this.hap.Characteristic.SecuritySystemCurrentState.DISARMED)
+    this.updateSecuritySystemTargetState(this.hap.Characteristic.SecuritySystemCurrentState.DISARMED)
 
-    // list characteristics
+    // list characteristics for debug
     if (this.verboseLog) {
       for (const c of security.characteristics) {
         this.log.info("SecuritySystem: " + c.displayName)
@@ -80,9 +79,10 @@ export class NessPanelHelper {
 
     // configure target state handler
     security.getCharacteristic(this.hap.Characteristic.SecuritySystemTargetState)
-      .on('set', this.setSecuritySystemTargetState.bind(this))
       // configure valid arming states/modes
       .setProps({ validValues: this.validArmingStates(this.excludeModes) })
+      // configure
+      .on('set', this.setSecuritySystemTargetState.bind(this))
     if (this.verboseLog)
       this.log.info("Valid arming states: " + this.validArmingStates(this.excludeModes))
 
@@ -133,7 +133,7 @@ export class NessPanelHelper {
 
     // setup interface connection
 
-    // setup on interface connection
+    // configure on connection handler
     this.nessClient.onConnection(() => {
       this.log.info('Interface: Connected: host: ' + this.nessClient.host + ' port: ' + this.nessClient.port)
       this.updateStatusFault(false)
@@ -145,7 +145,7 @@ export class NessPanelHelper {
       setTimeout(() => this.nessClient.sendCommand(NESS_STATUS_VERSION), 5000)
     })
 
-    // setup on interface connection error
+    // configure on error handler
     this.nessClient.onConnectionError((error) => {
       this.log.warn('Interface: ' + error)
       this.updateStatusFault(true)
@@ -162,13 +162,14 @@ export class NessPanelHelper {
         if (this.verboseLog)
           this.log.info('Interface: Retry connect: wait for retry in <= ' + this.connect_poll + ' secs')
       }
-
     })
 
     // try to connect and then continue to poll
     this.nessClient.connect()
 
-    // nessclient.connect*() schedules nessclient.update() to be called 60 secs
+    // nessclient.connect*() schedules nessclient.update() for every 60 secs
+    if (this.connect_poll <= NESS_CLIENT_UPDATE_POLL)
+      this.log.warn("NESS_CLIENT_UPDATE_POLL: " + NESS_CLIENT_UPDATE_POLL + " secs should be < connect_poll: " + this.connect_poll + " secs")
     setInterval(() => {
       {
         this.connect_retry_count = 0
@@ -185,8 +186,6 @@ export class NessPanelHelper {
       }
     }, this.connect_poll * 1000);
   }
-
-
 
   // handle NessClient eventReceived
   private eventReceived(event: BaseEvent) {
@@ -271,123 +270,96 @@ export class NessPanelHelper {
       this.log.info("ViewStateUpdate: states: " + JSON.stringify(states))
   }
 
-
-  // map hap state to text
-  private hapStateText(hapState: number) {
-    switch (hapState) {
-      case this.hap.Characteristic.SecuritySystemCurrentState.DISARMED:
-        return 'DISARMED'
-      case this.hap.Characteristic.SecuritySystemCurrentState.AWAY_ARM:
-        return 'AWAY'
-      case this.hap.Characteristic.SecuritySystemCurrentState.NIGHT_ARM:
-        return 'NIGHT'
-      case this.hap.Characteristic.SecuritySystemCurrentState.STAY_ARM:
-        return 'HOME'
-      case this.hap.Characteristic.SecuritySystemCurrentState.ALARM_TRIGGERED:
-        return 'TRIGGERED'
-      default:
-        return 'NOT KNOWN'
-    }
-  }
-
-  // map panel state to hap state
-  private panelToHap(panelState: ArmingState) {
-    let hapState = -1
-    switch (panelState) {
-      case ArmingState.ARMED_HOME:
-        hapState = this.hap.Characteristic.SecuritySystemCurrentState.STAY_ARM
-        break
+  // handle panel state change
+  private panelStateChanged(state: ArmingState): void {
+    this.log.info("Arming state changed: " + state)
+    this.panelState = state
+    switch (state) {
       case ArmingState.ARMED_AWAY:
-        hapState = this.hap.Characteristic.SecuritySystemCurrentState.AWAY_ARM
+        if (this.verboseLog)
+          this.log.info('armingStateChanged: ' + state + ' update current hap to: AWAY_ARM and target hap to: AWAY_ARM')
+        this.updateSecuritySystemCurrentState(this.hap.Characteristic.SecuritySystemCurrentState.AWAY_ARM)
+        this.updateSecuritySystemTargetState(this.hap.Characteristic.SecuritySystemTargetState.AWAY_ARM)
         break
-      case ArmingState.ARMED_NIGHT:
-        hapState = this.hap.Characteristic.SecuritySystemCurrentState.NIGHT_ARM
+      case ArmingState.ARMED_HOME:
+        if (this.verboseLog)
+          this.log.info('armingStateChanged: ' + state + ' update current hap to: STAY_ARM and target hap to: STAY_ARM')
+        this.updateSecuritySystemCurrentState(this.hap.Characteristic.SecuritySystemCurrentState.STAY_ARM)
+        this.updateSecuritySystemTargetState(this.hap.Characteristic.SecuritySystemTargetState.STAY_ARM)
         break
       case ArmingState.DISARMED:
-        hapState = this.hap.Characteristic.SecuritySystemCurrentState.DISARMED
+        if (this.verboseLog)
+          this.log.info('armingStateChanged: ' + state + ' update current hap to: DISARMED and target hap to: DISARM')
+        this.updateSecuritySystemCurrentState(this.hap.Characteristic.SecuritySystemCurrentState.DISARMED)
+        this.updateSecuritySystemTargetState(this.hap.Characteristic.SecuritySystemTargetState.DISARM)
         break
       case ArmingState.TRIGGERED:
-        hapState = this.hap.Characteristic.SecuritySystemCurrentState.ALARM_TRIGGERED
+        if (this.verboseLog)
+          this.log.info('armingStateChanged: ' + state + ' update current hap to: ALARM_TRIGGERED and no change to target hap:')
+        this.updateSecuritySystemCurrentState(this.hap.Characteristic.SecuritySystemCurrentState.ALARM_TRIGGERED)
+        break
+      // we don't really know the target states here, so we have to approximate,
+      // eventually one of the definitive events will appear
+      case ArmingState.ARMING:
+        if (this.verboseLog)
+          this.log.info('armingStateChanged: ' + state + ' update target hap to: ARM_AWAY and no change to current hap:')
+        this.updateSecuritySystemTargetState(this.hap.Characteristic.SecuritySystemTargetState.AWAY_ARM)
+        break
+      case ArmingState.ENTRY_DELAY:
+        if (this.verboseLog)
+          this.log.info('armingStateChanged: ' + state + ' no change to target hap: and no change to current hap:')
+        break
+      case ArmingState.EXIT_DELAY:
+        if (this.verboseLog)
+          this.log.info('armingStateChanged: ' + state + ' update target hap to: ARM_AWAY and no change to current hap:')
+        this.updateSecuritySystemTargetState(this.hap.Characteristic.SecuritySystemTargetState.AWAY_ARM)
         break
       case ArmingState.UNKNOWN:
-      case ArmingState.ARMING:
-      case ArmingState.ENTRY_DELAY:
-      case ArmingState.EXIT_DELAY:
-        break
       default:
-        this.log.error('Panel state change not known: panel state: ' + panelState)
-    }
-    return hapState
-  }
-  // handle NessClient ArmingState change
-  private stateChanged(state: ArmingState): void {
-    this.log.info("Arming state changed: " + state)
-    this.currentPanelState = state
-    let changedHapState = this.panelToHap(state)
-    const security = this.accessory.getService(this.hap.Service.SecuritySystem)
-    if (security) {
-      const targetPanelHapState = security.getCharacteristic(this.hap.Characteristic.SecuritySystemTargetState).value
-      // DISARMED is the target panel state for target hap of NIGHT
-      if (targetPanelHapState === this.hap.Characteristic.SecuritySystemTargetState.NIGHT_ARM &&
-        changedHapState === this.hap.Characteristic.SecuritySystemCurrentState.DISARMED) {
-        changedHapState = this.hap.Characteristic.SecuritySystemCurrentState.NIGHT_ARM
-      }
-      if (0 < changedHapState) {
-        if (this.verboseLog)
-          this.log.info('stateChanged: ' + state + ' update hap to: ' + this.hapStateText(changedHapState))
-        this.updateSecuritySystemCurrentState(changedHapState)
-      } else {
-        if (this.verboseLog)
-          this.log.info('stateChanged: state not known: ' + state)
-      }
+        this.log.error('Arming state change not known: ' + state)
+
     }
   }
 
   // handle setSecuritySystemTargetState
-  private setSecuritySystemTargetState(targetPanelHapState: CharacteristicValue, callback: CharacteristicSetCallback) {
-    const currentPanelHapState = this.panelToHap(this.currentPanelState)
-    if (this.verboseLog)
-      this.log.info('Request: ' + this.hapStateText(targetPanelHapState as number) + ' (Panel state: ' + this.hapStateText(currentPanelHapState) + ')')
-    if (currentPanelHapState === targetPanelHapState) {
-      this.updateSecuritySystemCurrentState(targetPanelHapState)
-      if (this.verboseLog)
-        this.log.info('Request: ' + this.hapStateText(targetPanelHapState) + ' (Panel state matches - nothing to do)')
-    } else {
-      switch (targetPanelHapState) {
-        case this.hap.Characteristic.SecuritySystemTargetState.STAY_ARM:
-          this.targetPanelState = ArmingState.ARMED_HOME
-          this.nessClient.armHome(this.keypadCode)
-          this.log.info('Request: ' + this.hapStateText(targetPanelHapState) + ' Command: ARM HOME')
-          break
-        case this.hap.Characteristic.SecuritySystemTargetState.AWAY_ARM:
-          this.targetPanelState = ArmingState.ARMED_AWAY
+  private setSecuritySystemTargetState(targetState: CharacteristicValue, callback: CharacteristicSetCallback) {
+    switch (targetState) {
+      case this.hap.Characteristic.SecuritySystemTargetState.AWAY_ARM:
+        if (this.panelState == ArmingState.ARMED_AWAY) {
+          if (this.verboseLog)
+            this.log.info('request: AWAY_ARM' + ' current panel state matches - do nothing')
+        } else {
           this.nessClient.armAway(this.keypadCode)
-          this.log.info('Request: ' + this.hapStateText(targetPanelHapState) + ' Command: ARM AWAY')
-          break
-        case this.hap.Characteristic.SecuritySystemTargetState.NIGHT_ARM:
-          // NIGHT_ARM does not exist on Ness, so just make it another state of DISARMED
-          if (this.currentPanelState === ArmingState.DISARMED) {
-            this.updateSecuritySystemCurrentState(this.hap.Characteristic.SecuritySystemCurrentState.NIGHT_ARM)
-          } else {
-            this.targetPanelState = ArmingState.DISARMED
-            this.nessClient.disarm(this.keypadCode)
-            this.log.info('Request: ' + this.hapStateText(targetPanelHapState) + ' Command: DISARM')
-          }
-          break
-        case this.hap.Characteristic.SecuritySystemTargetState.DISARM:
-          this.targetPanelState = ArmingState.DISARMED
+          this.log.info('Request: AWAY_ARM' + ' Issue command: ARM AWAY')
+        }
+        break
+      case this.hap.Characteristic.SecuritySystemTargetState.STAY_ARM:
+        if (this.panelState == ArmingState.ARMED_HOME) {
+          if (this.verboseLog)
+            this.log.info('request: STAY_ARM' + ' current panel state matches - do nothing')
+        } else {
+          this.nessClient.armHome(this.keypadCode)
+          this.log.info('Request: STAY_ARM' + ' Issue command: ARM HOME')
+        }
+        break
+      case this.hap.Characteristic.SecuritySystemTargetState.DISARM:
+        if (this.panelState == ArmingState.DISARMED) {
+          if (this.verboseLog)
+            this.log.info('request: DISARM' + ' current panel state matches - do nothing')
+        } else {
           this.nessClient.disarm(this.keypadCode)
-          this.log.info('Request: ' + this.hapStateText(targetPanelHapState) + ' Command: DISARM')
-          break
-        default:
-          callback(new Error('Request: not known: ' + targetPanelHapState))
-      }
+          this.log.info('Request: DISARM' + ' Issue command: DISARM')
+        }
+        break
+      default:
+        this.log.error('Request not known:' + targetState)
+        callback(new Error('Request: not known: ' + targetState))
     }
     callback(NO_ERRORS)
   }
 
-  // map target state to mode
-  private stateToMode(state: CharacteristicValue) {
+  // map hap state to mode
+  private hapToMode(state: CharacteristicValue) {
     switch (state) {
       case this.hap.Characteristic.SecuritySystemCurrentState.DISARMED:
         return ArmingMode.OFF
@@ -405,14 +377,14 @@ export class NessPanelHelper {
   }
 
   // update security system current state
-  private updateSecuritySystemCurrentState(state: number) {
+  private updateSecuritySystemCurrentState(state: CharacteristicValue) {
     const security = this.accessory.getService(this.hap.Service.SecuritySystem)
     if (security) {
       security.updateCharacteristic(this.hap.Characteristic.SecuritySystemCurrentState, state)
     }
   }
 
-  private updateSecuritySystemTargetState(state: number) {
+  private updateSecuritySystemTargetState(state: CharacteristicValue) {
     const security = this.accessory.getService(this.hap.Service.SecuritySystem)
     if (security) {
       security.updateCharacteristic(this.hap.Characteristic.SecuritySystemTargetState, state)
@@ -464,14 +436,13 @@ export class NessPanelHelper {
   // valid arming states
   private validArmingStates(excludeModes: string[]) {
     const states = [
-      this.hap.Characteristic.SecuritySystemTargetState.NIGHT_ARM,
       this.hap.Characteristic.SecuritySystemTargetState.STAY_ARM,
       this.hap.Characteristic.SecuritySystemTargetState.AWAY_ARM,
     ]
     const valid = states.filter((state) =>
       !excludeModes.find((m) => {
-        const mode = this.stateToMode(state)
-        return mode && m === mode
+        const mode = this.hapToMode(state)
+        return mode && m == mode
       }))
     // always include DISARM
     valid.push(this.hap.Characteristic.SecuritySystemTargetState.DISARM)
