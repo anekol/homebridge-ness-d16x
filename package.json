@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "license": "MIT",
   "engines": {
-    "node": ">=10.17.0",
+    "node": ">=18.16.0",
     "homebridge": ">=1.0.0"
   },
   "main": "dist/index.js",
@@ -21,7 +21,10 @@
     "D16",
     "D16x"
   ],
-  "repository": "https://github.com/anekol/homebridge-ness-d16x",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anekol/homebridge-ness-d16x.git"
+  },
   "bugs": {
     "url": "https://github.com/anekol/homebridge-ness-d16x/issues"
   },
@@ -29,7 +32,7 @@
     "nessclient": "2.2.0"
   },
   "devDependencies": {
-    "@types/node": "^17.0.31",
+    "@types/node": "^18.16.0",
     "@typescript-eslint/eslint-plugin": "^5.23.0",
     "@typescript-eslint/parser": "^5.23.0",
     "eslint": "^8.15.0",
